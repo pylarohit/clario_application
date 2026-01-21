@@ -24,8 +24,9 @@ class MyApp extends StatelessWidget {
       ),
       initialRoute: '/',
       routes: {
-        '/': (context) => const LoginPage(),
-        '/home': (context) => const HomePage(), // Define your home page
+        '/': (context) => HomePage(),
+        '/home': (context) => HomePage(), // Define your home page
+        '/login': (context) => const LoginPage(),
       },
       debugShowCheckedModeBanner: false,
     );

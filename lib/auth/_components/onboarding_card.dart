@@ -124,8 +124,9 @@ class _OnBoardingCardState extends State<OnBoardingCard> {
   void initState() {
     super.initState();
     data = FormData();
-    // Check if email provider (you might need to implement this based on your auth)
-    // For now, assume false
+    // Check if user signed up with email/password
+    final user = Supabase.instance.client.auth.currentUser;
+    isEmailProvider = user?.appMetadata['provider'] == 'email' || true;
   }
 
   List<String> get focusOptions {
@@ -165,42 +166,42 @@ class _OnBoardingCardState extends State<OnBoardingCard> {
   }
 
   Future<void> finish() async {
-    // Implement the finish logic similar to the TS version
-    // This would update Supabase and navigate
     setState(() => loading = true);
     try {
-      // Update user data in Supabase
-      final updatePayload = {
-        'userPhone': data.phone,
-        'institutionName': data.institution.trim().toLowerCase(),
-        'mainFocus': data.focus?.trim().toLowerCase(),
-        'current_status': data.profession?.displayName.toLowerCase(),
-        'is_verified': true,
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) throw Exception('No user logged in');
+
+      // Prepare profile data
+      final profileData = {
+        'id': user.id,
+        'email': user.email,
+        'full_name': data.name?.trim() ?? user.email?.split('@')[0] ?? 'User',
+        'phone': data.phone.trim(),
+        'bio': 'Institution: ${data.institution.trim()}\nProfession: ${data.profession?.displayName}\nFocus: ${data.focus}',
+        'date_of_birth': data.dob,
+        'institution': data.institution.trim(),
+        'profession': data.profession?.displayName,
+        'main_focus': data.focus?.trim(),
+        'updated_at': DateTime.now().toIso8601String(),
       };
 
-      if (data.name != null && data.name!.trim().isNotEmpty) {
-        updatePayload['userName'] = data.name!.trim();
-      }
-
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user != null) {
-        await Supabase.instance.client
-            .from('users')
-            .update(updatePayload)
-            .eq('id', user.id);
-      }
+      // Save to profiles table
+      await Supabase.instance.client.from('profiles').upsert(profileData);
 
       // Navigate to home
       if (mounted) {
         Navigator.pushReplacementNamed(context, '/home');
       }
     } catch (e) {
-      // Handle error
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
     } finally {
-      setState(() => loading = false);
+      if (mounted) {
+        setState(() => loading = false);
+      }
     }
   }
 
@@ -211,6 +212,7 @@ class _OnBoardingCardState extends State<OnBoardingCard> {
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header
@@ -235,9 +237,7 @@ class _OnBoardingCardState extends State<OnBoardingCard> {
             const SizedBox(height: 32),
 
             // Step Content
-            Expanded(
-              child: _buildStepContent(),
-            ),
+            _buildStepContent(),
 
             // Navigation Buttons
             const SizedBox(height: 24),

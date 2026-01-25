@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -123,12 +124,26 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Future<void> handleLogin(OAuthProvider provider) async {
     setState(() => loading = true);
     try {
-      await Supabase.instance.client.auth.signInWithOAuth(provider);
+      await Supabase.instance.client.auth.signInWithOAuth(
+        provider,
+        redirectTo: kIsWeb 
+            ? '${Uri.base.origin}/auth/callback'
+            : 'clario_application://callback',
+        queryParams: {
+          'access_type': 'offline',
+          'prompt': 'select_account',
+        },
+      );
+      
       // Session will be handled via auth state listener
     } catch (e) {
-      setState(() => error = e.toString());
+      if (mounted) {
+        setState(() => error = e.toString());
+      }
     } finally {
-      setState(() => loading = false);
+      if (mounted) {
+        setState(() => loading = false);
+      }
     }
   }
 
@@ -143,30 +158,47 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     });
     try {
       if (isSignup) {
+        print('🔐 Starting signup...');
         final response = await Supabase.instance.client.auth.signUp(
           email: emailController.text,
           password: passwordController.text,
         );
+        print('✅ Signup response: user=${response.user?.id}, session=${response.session != null}');
         if (response.user != null && response.session == null) {
           setState(() =>
           error = 'Please check your email for verification link');
-        } else {
-          // Navigate
-          //Navigator.pushReplacementNamed(context, '/home');
+        } else if (response.session != null) {
+          print('🚀 Signup successful, navigating...');
+          // Wait a moment for auth state to propagate, then navigate
+          await Future.delayed(Duration(milliseconds: 500));
+          if (mounted) {
+            Navigator.pushReplacementNamed(context, '/home');
+          }
         }
       } else {
+        print('🔐 Starting login...');
         final response = await Supabase.instance.client.auth.signInWithPassword(
           email: emailController.text,
           password: passwordController.text,
         );
+        print('✅ Login response: session=${response.session != null}');
         if (response.session != null) {
-          //Navigator.pushReplacementNamed(context, '/home');
+          print('🚀 Login successful, navigating...');
+          await Future.delayed(Duration(milliseconds: 500));
+          if (mounted) {
+            Navigator.pushReplacementNamed(context, '/home');
+          }
         }
       }
     } catch (e) {
-      setState(() => error = e.toString());
+      print('❌ Auth error: $e');
+      if (mounted) {
+        setState(() => error = e.toString());
+      }
     } finally {
-      setState(() => loading = false);
+      if (mounted) {
+        setState(() => loading = false);
+      }
     }
   }
 

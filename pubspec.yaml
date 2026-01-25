@@ -40,6 +40,7 @@ dependencies:
   supabase_flutter: ^2.5.8
   url_launcher: ^6.2.6
   google_fonts: ^6.2.1
+  google_generative_ai: ^0.4.6
 
 dev_dependencies:
   flutter_test:
@@ -69,6 +70,7 @@ flutter:
   #   - images/a_dot_ham.jpeg
   assets:
     - assets/
+    - .env
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

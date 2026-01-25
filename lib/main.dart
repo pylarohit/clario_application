@@ -1,14 +1,42 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth/login.dart';
-import 'home/home.dart'; // Assuming you have a home page
+import 'auth/onboarding.dart';
+import 'home/home.dart';
+import 'package:app_links/app_links.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Supabase.initialize(
-    url: 'YOUR_SUPABASE_URL', // Replace with your Supabase URL
-    anonKey: 'YOUR_SUPABASE_ANON_KEY', // Replace with your Supabase anon key
-  );
+  await dotenv.load(fileName: ".env");
+  
+  // Initialize Supabase with credentials from .env
+  final supabaseUrl = dotenv.env['NEXT_PUBLIC_SUPABASE_URL'];
+  final supabaseAnonKey = dotenv.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'];
+  
+  if (supabaseUrl != null && supabaseAnonKey != null) {
+    await Supabase.initialize(
+      url: supabaseUrl,
+      anonKey: supabaseAnonKey,
+    );
+  }
+  
+  // Setup deep linking for OAuth callbacks (mobile only)
+  if (!kIsWeb) {
+    final appLinks = AppLinks();
+    appLinks.uriLinkStream.listen((uri) {
+      try {
+        if (Supabase.instance.client.auth.currentSession == null) {
+          Supabase.instance.client.auth.getSessionFromUrl(uri);
+        }
+      } catch (e) {
+        // Ignore errors from non-OAuth deep links
+        print('Deep link error (ignored): $e');
+      }
+    });
+  }
+  
   runApp(const MyApp());
 }
 
@@ -22,10 +50,9 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      initialRoute: '/',
+      home: const AuthGate(),
       routes: {
-        '/': (context) => HomePage(),
-        '/home': (context) => HomePage(), // Define your home page
+        '/home': (context) => HomePage(),
         '/login': (context) => const LoginPage(),
       },
       debugShowCheckedModeBanner: false,
@@ -33,88 +60,102 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+// AuthGate: Checks authentication status and routes accordingly
+class AuthGate extends StatefulWidget {
+  const AuthGate({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<AuthGate> createState() => _AuthGateState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _AuthGateState extends State<AuthGate> {
+  bool _loading = true;
+  bool _hasProfile = false;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+  @override
+  void initState() {
+    super.initState();
+    _checkAuth();
+  }
+
+  Future<void> _checkAuth() async {
+    // Listen to auth state changes
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
+      if (mounted) {
+        await _checkUserProfile();
+      }
     });
+    
+    await _checkUserProfile();
+  }
+
+  Future<void> _checkUserProfile() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    
+    if (user != null) {
+      try {
+        print('🔍 Checking profile for user: ${user.id}');
+        // Check if user has a profile
+        final response = await Supabase.instance.client
+            .from('profiles')
+            .select()
+            .eq('id', user.id)
+            .maybeSingle();
+        
+        print('📊 Profile response: $response');
+        final hasProfile = response != null && response['full_name'] != null;
+        print('✅ Has profile: $hasProfile');
+        
+        if (mounted) {
+          setState(() {
+            _hasProfile = hasProfile;
+            _loading = false;
+          });
+        }
+      } catch (e) {
+        print('❌ Error checking profile: $e');
+        print('🔄 Assuming no profile - routing to onboarding');
+        if (mounted) {
+          setState(() {
+            _hasProfile = false;
+            _loading = false;
+          });
+        }
+      }
+    } else {
+      setState(() {
+        _loading = false;
+        _hasProfile = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
+    if (_loading) {
+      return Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
-    );
+      );
+    }
+    
+    final session = Supabase.instance.client.auth.currentSession;
+    print('🏠 AuthGate build - session: ${session != null}, hasProfile: $_hasProfile');
+    
+    // Not logged in -> Show Login
+    if (session == null) {
+      print('➡️ Routing to LoginPage');
+      return const LoginPage();
+    }
+    
+    // Logged in but no profile -> Show Onboarding
+    if (!_hasProfile) {
+      print('➡️ Routing to OnboardingPage');
+      return const OnboardingPage();
+    }
+    
+    // Logged in with profile -> Show Home
+    return HomePage();
   }
 }

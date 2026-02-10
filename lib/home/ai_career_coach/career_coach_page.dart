@@ -1,95 +1,135 @@
+// ============================================================================
+// AI CAREER COACH PAGE - Production-Ready Intelligent Career Guidance System
+// ============================================================================
+// PURPOSE: Provides AI-powered career coaching with personalized guidance
+// FEATURES:
+//  - Real-time conversational AI using Google Gemini 2.5 Flash
+//  - Automatic career path extraction and database persistence
+//  - Context-aware responses based on user profile and quiz completion
+//  - Follow-up question generation for deeper exploration
+//  - Fully responsive design (mobile, tablet, desktop)
+//  - Search limit tracking and user authentication
+// DEPENDENCIES: flutter_dotenv, google_generative_ai, supabase_flutter
+// ============================================================================
+
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 
-// Message model for chat
+// ============================================================================
+// DATA MODELS & CONSTANTS
+// ============================================================================
+
+/// Message role enum for type-safe message identification
+enum MessageRole { user, ai }
+
+/// Message data model representing conversation between user and AI
+/// Used to maintain chat history and display conversation flow
 class Message {
-  final String role; // 'user' or 'ai'
+  final MessageRole role;
   final String text;
   final List<String>? followUpQuestions;
 
-  Message({required this.role, required this.text, this.followUpQuestions});
+  const Message({
+    required this.role,
+    required this.text,
+    this.followUpQuestions,
+  });
 }
 
+/// Application-wide constants for UI consistency
+class AppConstants {
+  // Color palette
+  static const Color primaryBlue = Color(0xFF5E9EF5);
+  static const Color darkBlue = Color(0xFF1B2347);
+  static const Color lightBlue = Color(0xFFDCEBFD);
+  static const Color backgroundColor = Color(0xFFF5F7FA);
+  
+  // AI Configuration
+  static const String geminiModel = 'gemini-2.5-flash';
+  static const double aiTemperature = 0.7;
+  static const int aiMaxTokens = 1024;
+  static const int maxSearches = 5;
+  static const int followUpCount = 4;
+  
+  // UI Dimensions
+  static const double borderRadiusSmall = 8.0;
+  static const double borderRadiusMedium = 12.0;
+  static const double borderRadiusLarge = 16.0;
+  
+  // Error Messages
+  static const String errorApiKey = 'API key not configured. Please contact support.';
+  static const String errorAiInit = 'Failed to initialize AI. Please try again later.';
+  static const String errorQuizRequired = 'Please complete the quiz first to use AI Career Coach!';
+  static const String errorNoSearches = 'No searches remaining. Upgrade to continue.';
+  static const String errorGenericResponse = 'Failed to generate response. Please try again.';
+  static const String errorCareerSave = 'Failed to save career goal. Please try again.';
+  
+  // Success Messages
+  static const String successCareerSaved = 'Career goal set: ';
+  
+  // Input validation
+  static const int minCareerLength = 2;
+  static const int maxCareerLength = 100;
+}
+
+// ============================================================================
+// MAIN WIDGET: AI Career Coach Page
+// ============================================================================
+
 class CareerCoachPage extends StatefulWidget {
+  const CareerCoachPage({super.key});
+
   @override
-  _CareerCoachPageState createState() => _CareerCoachPageState();
+  State<CareerCoachPage> createState() => _CareerCoachPageState();
 }
 
 class _CareerCoachPageState extends State<CareerCoachPage> {
-  bool _showSuggestions = false;
+  // ==========================================================================
+  // CONFIGURATION: Responsive Design Breakpoints
+  // ==========================================================================
+  static const double mobileBreakpoint = 600;
+  static const double smallMobileBreakpoint = 380;
+  static const double tabletBreakpoint = 900;
+  static const double desktopBreakpoint = 1200;
+
+  // ==========================================================================
+  // UI CONTROLLERS: Text Input and Scroll Management
+  // ==========================================================================
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  // Chat state
-  List<Message> _messages = [];
+  // ==========================================================================
+  // STATE MANAGEMENT: UI and Chat State
+  // ==========================================================================
+  bool _showSuggestions = false;
+  List<Message> _messages = const [];
   bool _aiLoading = false;
-  int _searchesRemaining = 5;
+  int _searchesRemaining = AppConstants.maxSearches;
 
-  // Gemini AI Model
-  late final GenerativeModel _model;
-  
-  // User profile
+  // ==========================================================================
+  // AI CONFIGURATION: Gemini Model Instance
+  // ==========================================================================
+  GenerativeModel? _model;
+
+  // ==========================================================================
+  // USER DATA: Profile Information from Supabase
+  // ==========================================================================
   String _userName = 'Guest';
   bool _loadingProfile = true;
+  bool _isQuizDone = false; // Quiz completion requirement for features
+  String _userCareer = ''; // User's selected career path
 
+  // ==========================================================================
+  // LIFECYCLE: Widget Initialization
+  // ==========================================================================
   @override
   void initState() {
     super.initState();
     _initializeGemini();
     _loadUserProfile();
-  }
-  
-  Future<void> _loadUserProfile() async {
-    try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user != null) {
-        final response = await Supabase.instance.client
-            .from('profiles')
-            .select()
-            .eq('id', user.id)
-            .maybeSingle();
-        
-        if (response != null && response['full_name'] != null) {
-          setState(() {
-            _userName = response['full_name'];
-            _loadingProfile = false;
-          });
-        } else {
-          setState(() {
-            _userName = user.email?.split('@')[0] ?? 'Guest';
-            _loadingProfile = false;
-          });
-        }
-      }
-    } catch (e) {
-      final user = Supabase.instance.client.auth.currentUser;
-      setState(() {
-        _userName = user?.email?.split('@')[0] ?? 'Guest';
-        _loadingProfile = false;
-      });
-    }
-  }
-
-  void _initializeGemini() {
-    final apiKey = dotenv.env['GEMINI_API_KEY'];
-    if (apiKey == null || apiKey.isEmpty) {
-      print('ERROR: GEMINI_API_KEY not found in .env file');
-      return;
-    }
-    
-    _model = GenerativeModel(
-      model: 'gemini-pro',
-      apiKey: apiKey,
-      generationConfig: GenerationConfig(
-        temperature: 0.7,
-        topK: 40,
-        topP: 0.95,
-        maxOutputTokens: 1024,
-      ),
-    );
   }
 
   @override
@@ -99,83 +139,321 @@ class _CareerCoachPageState extends State<CareerCoachPage> {
     super.dispose();
   }
 
-  // Generate AI response using Gemini
+  // ==========================================================================
+  // USER PROFILE: Load and Manage User Data from Supabase
+  // ==========================================================================
+
+  /// Fetches user profile from Supabase 'users' table
+  /// Retrieves: userName, quiz completion status, career goal (mainFocus)
+  /// Falls back to email username if profile data unavailable
+  Future<void> _loadUserProfile() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        final response = await Supabase.instance.client
+            .from('users')
+            .select()
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (response != null) {
+          setState(() {
+            _userName = response['userName'] ?? user.email?.split('@')[0] ?? 'Guest';
+            _isQuizDone = response['isQuizDone'] == true;
+            _userCareer = response['mainFocus'] ?? '';
+            _loadingProfile = false;
+          });
+        } else {
+          _setFallbackProfile(user);
+        }
+      }
+    } catch (e) {
+      // Production: Log to monitoring service instead of print
+      debugPrint('❌ Profile load error: $e');
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) _setFallbackProfile(user);
+    }
+  }
+
+  /// Sets fallback profile data when database fetch fails
+  void _setFallbackProfile(User user) {
+    setState(() {
+      _userName = user.email?.split('@')[0] ?? 'Guest';
+      _loadingProfile = false;
+    });
+  }
+
+  // ==========================================================================
+  // AI INITIALIZATION: Configure Gemini Model with API Key
+  // ==========================================================================
+
+  /// Initializes Google Gemini 2.5 Flash model for AI responses
+  /// Loads API key from .env file and configures generation parameters
+  /// Temperature: 0.7 (balanced creativity)
+  /// Max tokens: 1024 (concise responses)
+  void _initializeGemini() {
+    final apiKey = dotenv.env['GEMINI_API_KEY'];
+    
+    if (apiKey == null || apiKey.isEmpty) {
+      _showError(AppConstants.errorApiKey);
+      debugPrint('❌ GEMINI_API_KEY missing in .env');
+      return;
+    }
+
+    try {
+      _model = GenerativeModel(
+        model: AppConstants.geminiModel,
+        apiKey: apiKey,
+        generationConfig: GenerationConfig(
+          temperature: AppConstants.aiTemperature,
+          maxOutputTokens: AppConstants.aiMaxTokens,
+        ),
+      );
+    } catch (e) {
+      debugPrint('❌ Gemini initialization error: $e');
+      _showError(AppConstants.errorAiInit);
+    }
+  }
+
+  // ==========================================================================
+  // AI RESPONSE GENERATION: Core Gemini API Integration
+  // ==========================================================================
+
+  /// Generates personalized AI response using Gemini API
+  /// 
+  /// Process:
+  /// 1. Build context-aware prompt with user profile and career goal
+  /// 2. Generate main response using Gemini 2.5 Flash
+  /// 3. Generate 4 follow-up questions for deeper exploration
+  /// 4. Extract and save career intent if mentioned
+  /// 
+  /// Returns:
+  /// - response: AI-generated career advice (String)
+  /// - followUps: Suggested follow-up questions (`List<String>`)
+  /// 
+  /// Throws: Exception if API call fails or returns empty response
   Future<Map<String, dynamic>> _generateAIResponse(String userInput) async {
     try {
+      if (_model == null) {
+        throw Exception('AI model not initialized');
+      }
+
+      // Build context-aware prompt with user profile
+      final hasCareerGoal = _userCareer.isNotEmpty && 
+          _userCareer.toLowerCase() != 'choose career paths';
+      
       final prompt = '''
-You are an expert AI Career Coach. Provide personalized career guidance based on the user's question.
+You are Clario, a warm and friendly AI Career Coach having a natural conversation.
 
-User Question: $userInput
+User Profile:
+- Name: $_userName
+${hasCareerGoal ? '- Career Goal: $_userCareer' : '- Career Goal: Not yet chosen'}
 
-Please provide:
-1. A detailed, helpful response to their question
-2. Actionable advice and insights
-3. Relevant career guidance
+Current Question: $userInput
 
-Keep your response concise, professional, and encouraging. Focus on practical advice.
+Instructions:
+- Have a natural, flowing conversation like a real human mentor
+${hasCareerGoal ? '- Reference their career goal ($_userCareer) when relevant' : ''}
+- Be warm, encouraging, and personable
+- Keep responses conversational but concise (3-5 sentences max)
+- Give actionable, specific advice
+- End with an encouraging note or follow-up question
 ''';
 
       final content = [Content.text(prompt)];
-      final response = await _model.generateContent(content);
-      
+      final response = await _model!.generateContent(content);
+
       if (response.text == null || response.text!.isEmpty) {
-        throw Exception('Empty response from AI');
+        throw Exception('AI returned empty response');
       }
 
-      // Generate follow-up questions based on the context
+      final aiText = response.text!;
+
+      // Generate contextual follow-up questions
       final followUpPrompt = '''
 Based on this career question: "$userInput"
 
 Generate 4 relevant follow-up questions that would help the user explore this topic further.
-Format: Return only the questions, one per line, without numbering or bullets.
+Return only the questions, one per line, without numbering or bullets.
 ''';
 
-      final followUpContent = [Content.text(followUpPrompt)];
-      final followUpResponse = await _model.generateContent(followUpContent);
-      
-      List<String> followUps = [];
-      if (followUpResponse.text != null) {
-        followUps = followUpResponse.text!
-            .split('\n')
-            .where((line) => line.trim().isNotEmpty)
-            .take(4)
-            .toList();
-      }
+      List<String> followUps = await _generateFollowUpQuestions(followUpPrompt);
 
-      // Default follow-ups if generation fails
-      if (followUps.isEmpty) {
-        followUps = [
-          'What skills do I need for this?',
-          'What are the salary expectations?',
-          'How long does it take to learn?',
-          'What are the job prospects?',
-        ];
-      }
+      // Attempt to extract and save career intent from conversation
+      await _extractAndSaveCareer(userInput, aiText);
 
-      return {
-        'response': response.text!,
-        'followUps': followUps,
-      };
-    } catch (e) {
-      print('Error generating AI response: $e');
-      throw e;
+      return {'response': aiText, 'followUps': followUps};
+    } catch (e, stackTrace) {
+      debugPrint('❌ AI response generation error: $e\n$stackTrace');
+      rethrow;
     }
   }
 
-  // Send message
+  /// Generates follow-up questions using Gemini API
+  /// Falls back to default questions if generation fails
+  Future<List<String>> _generateFollowUpQuestions(String prompt) async {
+    try {
+      final content = [Content.text(prompt)];
+      final response = await _model!.generateContent(content);
+
+      if (response.text != null && response.text!.isNotEmpty) {
+        return response.text!
+            .split('\n')
+            .where((line) => line.trim().isNotEmpty)
+            .map((line) => line.replaceAll(RegExp(r'^[0-9]+\.\s*'), '').trim())
+            .take(AppConstants.followUpCount)
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('⚠️ Follow-up generation failed: $e');
+    }
+
+    return _getDefaultFollowUpQuestions();
+  }
+
+  /// Returns default follow-up questions for fallback
+  List<String> _getDefaultFollowUpQuestions() {
+    return const [
+      'What skills do I need for this?',
+      'What are the salary expectations?',
+      'How long does it take to learn?',
+      'What are the job prospects?',
+    ];
+  }
+
+  // ==========================================================================
+  // CAREER PATH EXTRACTION: Detect and Save Career Intent
+  // ==========================================================================
+
+  /// Analyzes conversation for career intent and saves to database
+  /// 
+  /// Detection patterns:
+  /// - "want to become", "want to be", "interested in becoming"
+  /// - "career as", "career in", "pursue"
+  /// 
+  /// Uses AI to extract specific career title from user input
+  /// Requires quiz completion before saving career path
+  Future<void> _extractAndSaveCareer(
+    String userInput,
+    String aiResponse,
+  ) async {
+    try {
+      if (_model == null) return;
+
+      // Career intent detection patterns
+      const careerPatterns = [
+        'want to become', 'become a', 'want to be',
+        'interested in becoming', 'career as', 'pursue',
+        'interested in', 'career in',
+      ];
+
+      final hasCareerIntent = careerPatterns.any(
+        (pattern) => userInput.toLowerCase().contains(pattern),
+      );
+
+      if (!hasCareerIntent) return;
+
+      // Extract career using AI
+      final extractPrompt = '''
+Extract the specific career or profession from this user input.
+
+User said: "$userInput"
+
+Return ONLY the career title (e.g., "Full Stack Developer", "Data Scientist").
+If no specific career mentioned, return "None".
+Do not include explanation.
+''';
+
+      final extractContent = [Content.text(extractPrompt)];
+      final extractResponse = await _model!.generateContent(extractContent);
+
+      if (extractResponse.text != null && extractResponse.text!.isNotEmpty) {
+        final career = extractResponse.text!.trim();
+
+        if (_isValidCareerName(career)) {
+          await _saveCareerToDatabase(career);
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ Career extraction failed: $e');
+      // Non-critical feature - don't disrupt user experience
+    }
+  }
+
+  /// Saves extracted career goal to Supabase 'users' table
+  /// Requires quiz completion to prevent premature career selection
+  /// Updates both database and local state on success
+  Future<void> _saveCareerToDatabase(String career) async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
+
+      // Enforce quiz completion requirement
+      if (!_isQuizDone) {
+        _showWarning('Please complete the quiz first to set your career path!');
+        return;
+      }
+
+      // Persist to database
+      await Supabase.instance.client
+          .from('users')
+          .update({'mainFocus': career})
+          .eq('id', user.id);
+
+      // Update local state
+      setState(() => _userCareer = career);
+
+      // Confirm to user
+      _showSuccess(AppConstants.successCareerSaved + career);
+    } catch (e) {
+      debugPrint('❌ Career save error: $e');
+      _showError(AppConstants.errorCareerSave);
+    }
+  }
+
+  /// Validates career name before saving
+  bool _isValidCareerName(String career) {
+    return career.toLowerCase() != 'none' &&
+        career.length > AppConstants.minCareerLength &&
+        career.length < AppConstants.maxCareerLength;
+  }
+
+  // ==========================================================================
+  // MESSAGE HANDLING: User Input and AI Response Flow
+  // ==========================================================================
+
+  /// Handles user message submission and AI response generation
+  /// 
+  /// Validation checks:
+  /// 1. Non-empty message
+  /// 2. Not already loading
+  /// 3. Quiz completion required
+  /// 4. Search limit not exceeded
+  /// 
+  /// Flow:
+  /// 1. Add user message to chat
+  /// 2. Generate AI response
+  /// 3. Add AI response with follow-ups to chat
+  /// 4. Auto-scroll to bottom
   void _sendMessage() async {
     final text = _searchController.text.trim();
-    if (text.isEmpty) return;
-    if (_aiLoading) return;
-    if (_searchesRemaining <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No searches remaining. Upgrade to continue.')),
-      );
+    if (text.isEmpty || _aiLoading) return;
+
+    // Enforce quiz completion
+    if (!_isQuizDone) {
+      _showWarning(AppConstants.errorQuizRequired);
       return;
     }
 
+    // Check usage limit
+    if (_searchesRemaining <= 0) {
+      _showWarning(AppConstants.errorNoSearches);
+      return;
+    }
+
+    // Update state: add user message, start loading
     setState(() {
-      _messages.add(Message(role: 'user', text: text));
+      _messages = [..._messages, Message(role: MessageRole.user, text: text)];
       _aiLoading = true;
       _searchesRemaining--;
     });
@@ -184,69 +462,131 @@ Format: Return only the questions, one per line, without numbering or bullets.
     _scrollToBottom();
 
     try {
+      // Generate AI response
       final aiData = await _generateAIResponse(text);
 
+      // Add AI response to chat
       setState(() {
-        _messages.add(
+        _messages = [
+          ..._messages,
           Message(
-            role: 'ai',
-            text: aiData['response'],
-            followUpQuestions: List<String>.from(aiData['followUps']),
+            role: MessageRole.ai,
+            text: aiData['response'] as String,
+            followUpQuestions: List<String>.from(aiData['followUps'] as List),
           ),
-        );
+        ];
         _aiLoading = false;
       });
 
       _scrollToBottom();
     } catch (e) {
+      debugPrint('❌ Send message error: $e');
+
+      // Add error message to chat
       setState(() {
-        _messages.add(
-          Message(role: 'ai', text: 'Something went wrong. Please try again.'),
-        );
+        _messages = [
+          ..._messages,
+          const Message(
+            role: MessageRole.ai,
+            text: 'I apologize, but I encountered an error. Please try again or contact support if the issue persists.',
+          ),
+        ];
         _aiLoading = false;
       });
+
+      _showError(AppConstants.errorGenericResponse);
     }
   }
 
-  // Clear chat
+  // ==========================================================================
+  // UTILITY METHODS: Chat Management and UI Helpers
+  // ==========================================================================
+
+  /// Clears conversation history and resets search limit
   void _clearChat() {
     setState(() {
-      _messages.clear();
-      _searchesRemaining = 5;
+      _messages = const [];
+      _searchesRemaining = AppConstants.maxSearches;
     });
   }
 
-  // Scroll to bottom
+  /// Auto-scrolls chat to latest message with smooth animation
   void _scrollToBottom() {
-    Future.delayed(Duration(milliseconds: 100), () {
+    Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
-          duration: Duration(milliseconds: 300),
+          duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
       }
     });
   }
 
+  /// Shows error snackbar with delete icon
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  /// Shows warning snackbar with option to dismiss
+  void _showWarning(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.orange,
+        duration: const Duration(seconds: 3),
+        action: SnackBarAction(
+          label: 'OK',
+          textColor: Colors.white,
+          onPressed: () {},
+        ),
+      ),
+    );
+  }
+
+  /// Shows success snackbar with checkmark
+  void _showSuccess(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  // ==========================================================================
+  // UI BUILD: Main Widget Tree Construction
+  // ==========================================================================
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < mobileBreakpoint;
 
     return Scaffold(
-      backgroundColor: Color(0xFFF5F7FA),
+      backgroundColor: AppConstants.backgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Color(0xFF1B2347)),
+          icon: Icon(Icons.arrow_back, color: AppConstants.darkBlue),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           'AI Career Coach',
           style: TextStyle(
-            color: Color(0xFF1B2347),
-            fontSize: 18,
+            color: AppConstants.darkBlue,
+            fontSize: isMobile ? 16 : 18,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -270,8 +610,8 @@ Format: Return only the questions, one per line, without numbering or bullets.
             ),
           ),
 
-          // Right sidebar
-          if (screenWidth > 1000)
+          // Right sidebar (desktop only)
+          if (screenWidth > desktopBreakpoint)
             Container(
               width: 320,
               decoration: BoxDecoration(
@@ -284,10 +624,19 @@ Format: Return only the questions, one per line, without numbering or bullets.
     );
   }
 
-  // Welcome screen (when no messages)
+  // ==========================================================================
+  // UI COMPONENTS: Welcome Screen, Chat Area, and Message Bubbles
+  // ==========================================================================
+
+  /// Welcome screen displayed before first message
+  /// Shows: personalized greeting, AI features, career suggestions
   Widget _buildWelcomeScreen() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    final isSmallMobile = screenWidth < 380;
+
     return SingleChildScrollView(
-      padding: EdgeInsets.all(20),
+      padding: EdgeInsets.all(isMobile ? 16 : 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -295,18 +644,23 @@ Format: Return only the questions, one per line, without numbering or bullets.
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                _loadingProfile ? 'Welcome...' : 'Welcome $_userName',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1B2347),
+              Flexible(
+                child: Text(
+                  _loadingProfile ? 'Welcome...' : 'Welcome $_userName',
+                  style: TextStyle(
+                    fontSize: isSmallMobile ? 22 : (isMobile ? 26 : 32),
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1B2347),
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              SizedBox(width: 12),
+              SizedBox(width: isSmallMobile ? 8 : 12),
               Container(
-                width: 48,
-                height: 48,
+                width: isSmallMobile ? 36 : (isMobile ? 40 : 48),
+                height: isSmallMobile ? 36 : (isMobile ? 40 : 48),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
@@ -320,19 +674,19 @@ Format: Return only the questions, one per line, without numbering or bullets.
               ),
             ],
           ),
-          SizedBox(height: 20),
+          SizedBox(height: isMobile ? 16 : 20),
 
           // Subtitle
           Text(
             'Lets get started with defining your career goals, and clearing your doubts. Tell me what you want to become.',
             style: TextStyle(
-              fontSize: 16,
+              fontSize: isSmallMobile ? 14 : 16,
               color: Color(0xFF1B2347),
               height: 1.5,
             ),
             textAlign: TextAlign.center,
           ),
-          SizedBox(height: 40),
+          SizedBox(height: isMobile ? 30 : 40),
 
           // Show suggestions or feature cards
           if (_showSuggestions)
@@ -344,11 +698,16 @@ Format: Return only the questions, one per line, without numbering or bullets.
     );
   }
 
-  // Feature cards
+  /// Feature cards displaying AI capabilities:
+  /// - Voice Assistant for interview prep
+  /// - Instant doubt clearing
+  /// - Real-time web search integration
   Widget _buildFeatureCards() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < mobileBreakpoint;
     return Wrap(
-      spacing: 16,
-      runSpacing: 16,
+      spacing: isMobile ? 12 : 16,
+      runSpacing: isMobile ? 12 : 16,
       children: [
         _buildFeatureCard(
           title: 'AI Voice Assistant',
@@ -375,36 +734,38 @@ Format: Return only the questions, one per line, without numbering or bullets.
     );
   }
 
-  // Career suggestions grid
+  /// Grid of popular career paths for quick selection
+  /// Tapping a chip fills the search bar with the career name
   Widget _buildCareerSuggestions() {
-    final suggestions = [
-      'Software Developer',
-      'Data Scientist',
-      'Artificial Intelligence Engineer',
-      'Computer Systems Analyst',
-      'IT Consultant',
+    const suggestions = [
+      'Full Stack Developer',
+      'Data Science',
+      'AI/ML Developer',
+      'Software Engineer',
+      'Backend Developer',
+      'Frontend Developer',
     ];
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: NeverScrollableScrollPhysics(),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 4,
-      ),
-      itemCount: suggestions.length,
-      itemBuilder: (context, index) {
-        return _buildSuggestionChip(suggestions[index]);
-      },
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: suggestions.map((suggestion) {
+        return _buildSuggestionChip(suggestion);
+      }).toList(),
     );
   }
 
-  // Chat area with messages
+  /// Scrollable chat interface with alternating user and AI messages
+  /// Includes loading indicator when AI is generating response
   Widget _buildChatArea() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < mobileBreakpoint;
+    final isSmallMobile = screenWidth < smallMobileBreakpoint;
+
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 20),
+      padding: EdgeInsets.symmetric(
+        horizontal: isSmallMobile ? 8 : (isMobile ? 12 : 20),
+      ),
       child: ListView.builder(
         controller: _scrollController,
         itemCount: _messages.length + (_aiLoading ? 1 : 0),
@@ -415,62 +776,95 @@ Format: Return only the questions, one per line, without numbering or bullets.
 
           final message = _messages[index];
 
-          if (message.role == 'user') {
-            return _buildUserMessage(message);
-          } else {
-            return _buildAIMessage(message);
-          }
+          return message.role == MessageRole.user
+              ? _buildUserMessage(message)
+              : _buildAIMessage(message);
         },
       ),
     );
   }
 
-  // User message bubble
+  /// User message bubble: right-aligned, blue background
+  /// Responsive width scaling for mobile/tablet/desktop
   Widget _buildUserMessage(Message message) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < mobileBreakpoint;
+    final isSmallMobile = screenWidth < smallMobileBreakpoint;
+
     return Align(
       alignment: Alignment.centerRight,
       child: Container(
-        constraints: BoxConstraints(maxWidth: 500),
-        margin: EdgeInsets.only(bottom: 16, left: 100),
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        constraints: BoxConstraints(
+          maxWidth: isSmallMobile
+              ? screenWidth * 0.85
+              : (isMobile ? screenWidth * 0.8 : 500),
+        ),
+        margin: EdgeInsets.only(
+          bottom: isSmallMobile ? 12 : 16,
+          left: isSmallMobile ? 20 : (isMobile ? 40 : 100),
+        ),
+        padding: EdgeInsets.symmetric(
+          horizontal: isSmallMobile ? 10 : (isMobile ? 12 : 16),
+          vertical: isSmallMobile ? 8 : (isMobile ? 10 : 12),
+        ),
         decoration: BoxDecoration(
-          color: Color(0xFF5E9EF5),
-          borderRadius: BorderRadius.circular(12),
+          color: AppConstants.primaryBlue,
+          borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
         ),
         child: Text(
           message.text,
-          style: TextStyle(fontSize: 14, color: Colors.white, height: 1.4),
+          style: TextStyle(
+            fontSize: isMobile ? 13 : 14,
+            color: Colors.white,
+            height: 1.4,
+          ),
         ),
       ),
     );
   }
 
-  // AI message bubble with follow-ups
+  /// AI message bubble: left-aligned, light blue background
+  /// Includes AI icon and grid of follow-up question chips
   Widget _buildAIMessage(Message message) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    final isSmallMobile = screenWidth < 380;
+
     return Align(
       alignment: Alignment.centerLeft,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            constraints: BoxConstraints(maxWidth: 550),
-            margin: EdgeInsets.only(bottom: 12, right: 100),
-            padding: EdgeInsets.all(16),
+            constraints: BoxConstraints(
+              maxWidth: isSmallMobile
+                  ? screenWidth * 0.95
+                  : (isMobile ? screenWidth * 0.9 : 550),
+            ),
+            margin: EdgeInsets.only(
+              bottom: isSmallMobile ? 10 : 12,
+              right: isSmallMobile ? 10 : (isMobile ? 20 : 100),
+            ),
+            padding: EdgeInsets.all(isSmallMobile ? 10 : (isMobile ? 12 : 16)),
             decoration: BoxDecoration(
-              color: Color(0xFFDCEBFD),
-              borderRadius: BorderRadius.circular(12),
+              color: AppConstants.lightBlue,
+              borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.auto_awesome, color: Color(0xFF5E9EF5), size: 24),
-                SizedBox(width: 12),
+                Icon(
+                  Icons.auto_awesome,
+                  color: AppConstants.primaryBlue,
+                  size: isMobile ? 20 : 24,
+                ),
+                SizedBox(width: isMobile ? 8 : 12),
                 Expanded(
                   child: Text(
                     message.text,
                     style: TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF1B2347),
+                      fontSize: isSmallMobile ? 13 : 14,
+                      color: AppConstants.darkBlue,
                       height: 1.5,
                     ),
                   ),
@@ -483,9 +877,13 @@ Format: Return only the questions, one per line, without numbering or bullets.
           if (message.followUpQuestions != null &&
               message.followUpQuestions!.isNotEmpty)
             Container(
-              constraints: BoxConstraints(maxWidth: 550),
-              margin: EdgeInsets.only(bottom: 16),
-              padding: EdgeInsets.all(12),
+              constraints: BoxConstraints(
+                maxWidth: isSmallMobile
+                    ? screenWidth * 0.95
+                    : (isMobile ? screenWidth * 0.9 : 550),
+              ),
+              margin: EdgeInsets.only(bottom: isSmallMobile ? 12 : 16),
+              padding: EdgeInsets.all(isSmallMobile ? 8 : (isMobile ? 10 : 12)),
               decoration: BoxDecoration(
                 color: Colors.grey[200],
                 borderRadius: BorderRadius.circular(12),
@@ -497,29 +895,29 @@ Format: Return only the questions, one per line, without numbering or bullets.
                     children: [
                       Icon(
                         Icons.lightbulb_outline,
-                        size: 16,
-                        color: Color(0xFF5E9EF5),
+                        size: isMobile ? 14 : 16,
+                        color: AppConstants.primaryBlue,
                       ),
                       SizedBox(width: 6),
                       Text(
                         'Follow Up',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: isMobile ? 11 : 12,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF5E9EF5),
+                          color: AppConstants.primaryBlue,
                         ),
                       ),
                     ],
                   ),
-                  SizedBox(height: 12),
+                  SizedBox(height: isMobile ? 10 : 12),
                   GridView.builder(
                     shrinkWrap: true,
                     physics: NeverScrollableScrollPhysics(),
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
-                      childAspectRatio: 3,
+                      crossAxisCount: isSmallMobile ? 1 : (isMobile ? 1 : 2),
+                      crossAxisSpacing: isSmallMobile ? 6 : 8,
+                      mainAxisSpacing: isSmallMobile ? 6 : 8,
+                      childAspectRatio: isSmallMobile ? 6 : (isMobile ? 5 : 3),
                     ),
                     itemCount: message.followUpQuestions!.length,
                     itemBuilder: (context, index) {
@@ -530,7 +928,7 @@ Format: Return only the questions, one per line, without numbering or bullets.
                         },
                         child: Container(
                           padding: EdgeInsets.symmetric(
-                            horizontal: 12,
+                            horizontal: isMobile ? 10 : 12,
                             vertical: 8,
                           ),
                           decoration: BoxDecoration(
@@ -541,8 +939,8 @@ Format: Return only the questions, one per line, without numbering or bullets.
                           child: Text(
                             message.followUpQuestions![index],
                             style: TextStyle(
-                              fontSize: 11,
-                              color: Color(0xFF1B2347),
+                              fontSize: isSmallMobile ? 10 : 11,
+                              color: AppConstants.darkBlue,
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -559,26 +957,29 @@ Format: Return only the questions, one per line, without numbering or bullets.
     );
   }
 
-  // Loading indicator
+  /// Animated loading indicator with pulsing effect
+  /// Displayed while waiting for AI response
   Widget _buildLoadingIndicator() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallMobile = screenWidth < smallMobileBreakpoint;
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        margin: EdgeInsets.only(bottom: 16),
-        padding: EdgeInsets.all(16),
+        margin: EdgeInsets.only(bottom: isSmallMobile ? 12 : 16),
+        padding: EdgeInsets.all(isSmallMobile ? 12 : 16),
         decoration: BoxDecoration(
-          color: Color(0xFFDCEBFD),
-          borderRadius: BorderRadius.circular(12),
+          color: AppConstants.lightBlue,
+          borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(
-              width: 20,
-              height: 20,
+              width: isSmallMobile ? 16 : 20,
+              height: isSmallMobile ? 16 : 20,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF5E9EF5)),
+                valueColor: AlwaysStoppedAnimation<Color>(AppConstants.primaryBlue),
               ),
             ),
             SizedBox(width: 12),
@@ -596,15 +997,20 @@ Format: Return only the questions, one per line, without numbering or bullets.
     );
   }
 
-  // Input area at bottom
+  /// Fixed bottom input bar with controls
+  /// Components: Clear/Suggestions toggle, search counter, text field, send button
+  /// Includes "Web" badge indicating real-time search capability
   Widget _buildInputArea() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallMobile = screenWidth < smallMobileBreakpoint;
+
     return Container(
-      padding: EdgeInsets.all(16),
+      padding: EdgeInsets.all(isSmallMobile ? 12 : 16),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: Offset(0, -2),
           ),
@@ -628,27 +1034,40 @@ Format: Return only the questions, one per line, without numbering or bullets.
                     _showSuggestions
                         ? Icons.keyboard_arrow_up
                         : Icons.keyboard_arrow_down,
-                    color: Color(0xFF1B2347),
+                    color: AppConstants.darkBlue,
                   ),
                   label: Text(
                     _showSuggestions ? 'Hide Suggestions' : 'Show Suggestions',
-                    style: TextStyle(fontSize: 14, color: Color(0xFF1B2347)),
+                    style: TextStyle(
+                      fontSize: isSmallMobile ? 12 : 14,
+                      color: AppConstants.darkBlue,
+                    ),
                   ),
                 )
               else
                 TextButton.icon(
                   onPressed: _clearChat,
-                  icon: Icon(Icons.delete_outline, color: Colors.red),
+                  icon: Icon(
+                    Icons.delete_outline,
+                    color: Colors.red,
+                    size: isSmallMobile ? 18 : 20,
+                  ),
                   label: Text(
                     'Clear Chat',
-                    style: TextStyle(fontSize: 14, color: Colors.red),
+                    style: TextStyle(
+                      fontSize: isSmallMobile ? 12 : 14,
+                      color: Colors.red,
+                    ),
                   ),
                 ),
 
               // Searches remaining
               Text(
                 '$_searchesRemaining searches -',
-                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                style: TextStyle(
+                  fontSize: isSmallMobile ? 11 : 13,
+                  color: Colors.grey[600],
+                ),
               ),
             ],
           ),
@@ -656,7 +1075,10 @@ Format: Return only the questions, one per line, without numbering or bullets.
 
           // Input field
           Container(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            padding: EdgeInsets.symmetric(
+              horizontal: isSmallMobile ? 12 : 16,
+              vertical: 4,
+            ),
             decoration: BoxDecoration(
               color: Colors.grey[100],
               borderRadius: BorderRadius.circular(12),
@@ -674,51 +1096,63 @@ Format: Return only the questions, one per line, without numbering or bullets.
                       border: InputBorder.none,
                       hintStyle: TextStyle(
                         color: Colors.grey[400],
-                        fontSize: 15,
+                        fontSize: isSmallMobile ? 13 : 15,
                       ),
                     ),
-                    style: TextStyle(fontSize: 15),
+                    style: TextStyle(fontSize: isSmallMobile ? 13 : 15),
                     onSubmitted: (_) => _sendMessage(),
                   ),
                 ),
                 SizedBox(width: 8),
 
                 // Web badge
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Color(0xFFE3F2FD),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Color(0xFF5E9EF5)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.language, size: 16, color: Color(0xFF5E9EF5)),
-                      SizedBox(width: 6),
-                      Text(
-                        'Web',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF5E9EF5),
-                          fontWeight: FontWeight.w500,
+                if (!isSmallMobile)
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isSmallMobile ? 8 : 12,
+                      vertical: isSmallMobile ? 4 : 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE3F2FD),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppConstants.primaryBlue),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.language,
+                          size: isSmallMobile ? 14 : 16,
+                          color: AppConstants.primaryBlue,
                         ),
-                      ),
-                    ],
+                        SizedBox(width: 4),
+                        Text(
+                          'Web',
+                          style: TextStyle(
+                            fontSize: isSmallMobile ? 11 : 13,
+                            color: AppConstants.primaryBlue,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                SizedBox(width: 8),
+                SizedBox(width: isSmallMobile ? 4 : 8),
 
                 // Send button
                 InkWell(
                   onTap: _aiLoading ? null : _sendMessage,
                   child: Container(
-                    padding: EdgeInsets.all(8),
+                    padding: EdgeInsets.all(isSmallMobile ? 6 : 8),
                     decoration: BoxDecoration(
-                      color: _aiLoading ? Colors.grey : Color(0xFF5E9EF5),
-                      borderRadius: BorderRadius.circular(8),
+                      color: _aiLoading ? Colors.grey : AppConstants.primaryBlue,
+                      borderRadius: BorderRadius.circular(AppConstants.borderRadiusSmall),
                     ),
-                    child: Icon(Icons.send, color: Colors.white, size: 20),
+                    child: Icon(
+                      Icons.send,
+                      color: Colors.white,
+                      size: isSmallMobile ? 18 : 20,
+                    ),
                   ),
                 ),
               ],
@@ -729,7 +1163,9 @@ Format: Return only the questions, one per line, without numbering or bullets.
     );
   }
 
-  // Right sidebar
+  /// Desktop-only sidebar showcasing premium features
+  /// - AI Voice Assistant card (purple gradient)
+  /// - Career Fit Assessment card (dark gradient)
   Widget _buildRightSidebar() {
     return SingleChildScrollView(
       padding: EdgeInsets.all(16),
@@ -742,7 +1178,7 @@ Format: Return only the questions, one per line, without numbering or bullets.
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withValues(alpha: 0.1),
                   blurRadius: 10,
                   offset: Offset(0, 4),
                 ),
@@ -771,7 +1207,7 @@ Format: Return only the questions, one per line, without numbering or bullets.
                         center: Alignment(0.7, -0.6),
                         radius: 0.8,
                         colors: [
-                          Color(0xFFAF6DFF).withOpacity(0.85),
+                          Color(0xFFAF6DFF).withValues(alpha: 0.85),
                           Colors.transparent,
                         ],
                       ),
@@ -789,7 +1225,7 @@ Format: Return only the questions, one per line, without numbering or bullets.
                         style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF1B2347),
+                          color: AppConstants.darkBlue,
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -798,7 +1234,7 @@ Format: Return only the questions, one per line, without numbering or bullets.
                         'AI Voice Assistant made for Interview Preparations. Try it out now',
                         style: TextStyle(
                           fontSize: 13,
-                          color: Color(0xFF1B2347),
+                          color: AppConstants.darkBlue,
                           height: 1.4,
                         ),
                         textAlign: TextAlign.center,
@@ -810,7 +1246,7 @@ Format: Return only the questions, one per line, without numbering or bullets.
                         label: Text('Talk Now'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
-                          foregroundColor: Color(0xFF1B2347),
+                          foregroundColor: AppConstants.darkBlue,
                           padding: EdgeInsets.symmetric(
                             horizontal: 24,
                             vertical: 12,
@@ -821,7 +1257,7 @@ Format: Return only the questions, one per line, without numbering or bullets.
                       Icon(
                         Icons.person,
                         size: 120,
-                        color: Colors.white.withOpacity(0.5),
+                        color: Colors.white.withValues(alpha: 0.5),
                       ),
                     ],
                   ),
@@ -844,7 +1280,7 @@ Format: Return only the questions, one per line, without numbering or bullets.
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withValues(alpha: 0.1),
                   blurRadius: 10,
                   offset: Offset(0, 4),
                 ),
@@ -870,7 +1306,7 @@ Format: Return only the questions, one per line, without numbering or bullets.
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF5E9EF5),
+                        color: AppConstants.primaryBlue,
                       ),
                     ),
                     SizedBox(height: 16),
@@ -889,7 +1325,7 @@ Format: Return only the questions, one per line, without numbering or bullets.
                       label: Text('Find Now'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.white,
-                        foregroundColor: Color(0xFF1B2347),
+                        foregroundColor: AppConstants.darkBlue,
                         padding: EdgeInsets.symmetric(
                           horizontal: 20,
                           vertical: 10,
@@ -905,7 +1341,7 @@ Format: Return only the questions, one per line, without numbering or bullets.
                   child: Icon(
                     Icons.assessment,
                     size: 100,
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withValues(alpha: 0.1),
                   ),
                 ),
               ],
@@ -916,6 +1352,8 @@ Format: Return only the questions, one per line, without numbering or bullets.
     );
   }
 
+  /// Reusable feature card component
+  /// Supports dark/light theme, optional action button, custom icon
   Widget _buildFeatureCard({
     required String title,
     required String description,
@@ -923,17 +1361,20 @@ Format: Return only the questions, one per line, without numbering or bullets.
     String? buttonText,
     required bool isDark,
   }) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < mobileBreakpoint;
+
     return Container(
-      width: MediaQuery.of(context).size.width > 900
-          ? (MediaQuery.of(context).size.width - 80) / 3
+      width: screenWidth > tabletBreakpoint
+          ? (screenWidth - 80) / 3
           : double.infinity,
-      padding: EdgeInsets.all(14),
+      padding: EdgeInsets.all(isMobile ? 12 : 14),
       decoration: BoxDecoration(
-        color: isDark ? Color(0xFF1B2347) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        color: isDark ? AppConstants.darkBlue : Colors.white,
+        borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 10,
             offset: Offset(0, 3),
           ),
@@ -949,9 +1390,9 @@ Format: Return only the questions, one per line, without numbering or bullets.
                 child: Text(
                   title,
                   style: TextStyle(
-                    fontSize: 15,
+                    fontSize: isMobile ? 14 : 15,
                     fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Color(0xFF1B2347),
+                    color: isDark ? Colors.white : AppConstants.darkBlue,
                   ),
                 ),
               ),
@@ -982,24 +1423,26 @@ Format: Return only the questions, one per line, without numbering or bullets.
                   padding: EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: isDark
-                        ? Colors.white.withOpacity(0.1)
+                        ? Colors.white.withValues(alpha: 0.1)
                         : Color(0xFFE3F2FD),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
                     icon,
-                    color: isDark ? Colors.white : Color(0xFF5E9EF5),
-                    size: 20,
+                    color: isDark ? Colors.white : AppConstants.primaryBlue,
+                    size: isMobile ? 18 : 20,
                   ),
                 ),
             ],
           ),
-          SizedBox(height: 10),
+          SizedBox(height: isMobile ? 8 : 10),
           Text(
             description,
             style: TextStyle(
-              fontSize: 12,
-              color: isDark ? Colors.white.withOpacity(0.9) : Colors.grey[700],
+              fontSize: isMobile ? 11 : 12,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.9)
+                  : Colors.grey[700],
               height: 1.5,
             ),
           ),
@@ -1008,36 +1451,51 @@ Format: Return only the questions, one per line, without numbering or bullets.
     );
   }
 
+  /// Individual career suggestion chip with tap interaction
+  /// On tap: fills search bar and hides suggestions
   Widget _buildSuggestionChip(String text) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < mobileBreakpoint;
+    final isSmallMobile = screenWidth < smallMobileBreakpoint;
+
     return InkWell(
       onTap: () {
         _searchController.text = text;
+        setState(() {
+          _showSuggestions = false;
+        });
+        FocusScope.of(context).requestFocus(FocusNode());
       },
       child: Container(
-        width: MediaQuery.of(context).size.width > 700
-            ? (MediaQuery.of(context).size.width - 80) / 3 - 8
-            : double.infinity,
-        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        width: isMobile ? double.infinity : 380,
+        height: isSmallMobile ? 52 : 60,
+        padding: EdgeInsets.symmetric(
+          horizontal: isSmallMobile ? 14 : 20,
+          vertical: isSmallMobile ? 12 : 16,
+        ),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey[300]!),
+          border: Border.all(color: Color(0xFFE0E0E0), width: 1),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 6,
               offset: Offset(0, 2),
             ),
           ],
         ),
-        child: Text(
-          text,
-          style: TextStyle(
-            fontSize: 15,
-            color: Color(0xFF1B2347),
-            fontWeight: FontWeight.w500,
+        child: Center(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: isSmallMobile ? 13 : 15,
+              color: AppConstants.darkBlue,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.2,
+            ),
+            textAlign: TextAlign.center,
           ),
-          textAlign: TextAlign.center,
         ),
       ),
     );

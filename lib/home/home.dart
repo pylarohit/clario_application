@@ -20,38 +20,66 @@ import '../auth/login.dart';
 import 'ai_career_coach/career_coach_page.dart';
 import 'ai_roadmap/roadmap_page.dart';
 import 'calendar_page.dart';
+import 'career_board_page.dart';
 import 'chat_page.dart';
+import 'mentor_connect_page.dart';
+import 'quiz/quiz_start_dialog.dart';
 
 /// Main Home Page Widget
 class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
   @override
-  _HomePageState createState() => _HomePageState();
+  HomePageState createState() => HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class HomePageState extends State<HomePage> with WidgetsBindingObserver {
+  // Static callback for triggering refresh from anywhere
+  static void Function()? _refreshCallback;
+
+  /// Register refresh callback
+  void _registerRefreshCallback() {
+    HomePageState._refreshCallback = () {
+      if (mounted) {
+        _refreshData();
+      }
+    };
+  }
+
+  /// Static method to trigger refresh from anywhere in the app
+  static void triggerRefresh() {
+    debugPrint('📢 [HomePage] Refresh triggered via static method');
+    _refreshCallback?.call();
+  }
   // ============================================================================
   // STATE VARIABLES
   // ============================================================================
-  
+
   // Navigation state variables
-  int _selectedNavIndex = 0;        // Sidebar navigation index
-  int _bottomNavIndex = 0;          // Bottom navigation bar index
-  bool _isAiToolsExpanded = false;  // AI Tools dropdown expansion state
+  int _selectedNavIndex = 0; // Sidebar navigation index
+  int _bottomNavIndex = 0; // Bottom navigation bar index
+  bool _isAiToolsExpanded = false; // AI Tools dropdown expansion state
   bool _isQuickActionsExpanded = false;
-  
+
   // Carousel state variables
-  int _currentCarouselIndex = 0;    // Current hero banner index
-  int _currentBannerIndex = 0;      // Current career banner index
-  
+  int _currentCarouselIndex = 0; // Current hero banner index
+  int _currentBannerIndex = 0; // Current career banner index
+
   // User profile data
   String _userName = 'User';
   String _userInitial = 'U';
-  
+  String _userStatus = '12th student';
+  String _userFocus = 'choose career paths';
+  String _userId = '';
+  bool _isQuizDone = false;
+  String _userStream = '';
+  List<String> _userDegrees = [];
+
   // Controllers
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  late PageController _pageController;         // Hero banner page controller
+  late PageController _pageController; // Hero banner page controller
   late PageController _careerBannerController; // Career banner page controller
-  Timer? _carouselTimer;                       // Auto-scroll timer for hero banner
+  Timer? _carouselTimer; // Auto-scroll timer for hero banner
 
   // ============================================================================
   // DATA - Mentors List (In production, fetch from API)
@@ -69,7 +97,11 @@ class _HomePageState extends State<HomePage> {
       'id': '2',
       'full_name': 'Rajesh Kumar',
       'current_position': 'Business Analyst',
-      'expertise': ['higher studies', 'career/path guidance', 'counseling & guidance'],
+      'expertise': [
+        'higher studies',
+        'career/path guidance',
+        'counseling & guidance',
+      ],
       'rating': 4.7,
       'avatar': 'assets/a2.png',
     },
@@ -104,34 +136,354 @@ class _HomePageState extends State<HomePage> {
   ];
 
   // ============================================================================
+  // DATA - Colleges List (Loaded from Supabase)
+  // ============================================================================
+  List<Map<String, dynamic>> colleges = [];
+
+  // ============================================================================
   // LIFECYCLE METHODS
   // ============================================================================
-  
+
   @override
   void initState() {
     super.initState();
+    _registerRefreshCallback();
+    WidgetsBinding.instance.addObserver(this);
     _pageController = PageController(initialPage: 0);
     _careerBannerController = PageController(initialPage: 0);
     _startAutoScroll();
-    _loadUserProfile();
+    _loadUserProfile().then((_) async {
+      if (_isQuizDone) {
+        await _loadQuizStream();
+      }
+      await _loadColleges();
+    });
+    _loadMentors();
   }
-  
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Refresh data when app comes to foreground
+      _refreshData();
+    }
+  }
+
+  /// Refresh all data when returning to the page
+  Future<void> _refreshData() async {
+    if (mounted) {
+      debugPrint('🔄 [HomePage] Refreshing data...');
+
+      // Show loading indicator briefly
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Updating dashboard...'),
+          duration: Duration(milliseconds: 1500),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Color(0xFF5E9EF5),
+        ),
+      );
+
+      await Future.wait([_loadUserProfile(), _loadMentors()]);
+
+      // Load quiz stream if quiz is done, then load colleges
+      if (_isQuizDone) {
+        await _loadQuizStream();
+      }
+      await _loadColleges();
+
+      debugPrint('✅ [HomePage] Data refresh completed');
+    }
+  }
+
+  /// Load quiz stream from userQuizData
+  Future<void> _loadQuizStream() async {
+    try {
+      debugPrint('🔍 [Home] Loading quiz stream for user: $_userId');
+      final response = await Supabase.instance.client
+          .from('userQuizData')
+          .select('quizInfo')
+          .eq('userId', _userId)
+          .maybeSingle();
+
+      debugPrint('📦 [Home] Quiz data response: $response');
+
+      if (response != null && response['quizInfo'] != null) {
+        final quizInfo = response['quizInfo'] as Map<String, dynamic>;
+        debugPrint('📦 [Home] Quiz info: $quizInfo');
+
+        if (quizInfo['stream'] != null) {
+          setState(() {
+            _userStream = quizInfo['stream'].toString();
+          });
+          debugPrint('✅ [Home] User stream loaded: $_userStream');
+        } else {
+          debugPrint('⚠️ [Home] No stream found in quizInfo');
+        }
+
+        // Load degrees from quiz info
+        if (quizInfo['degree'] != null) {
+          if (quizInfo['degree'] is List) {
+            setState(() {
+              _userDegrees = (quizInfo['degree'] as List)
+                  .map((item) => item.toString().toLowerCase())
+                  .toList();
+            });
+          } else {
+            setState(() {
+              _userDegrees = [quizInfo['degree'].toString().toLowerCase()];
+            });
+          }
+          debugPrint('✅ [Home] User degrees loaded: $_userDegrees');
+        } else {
+          debugPrint('⚠️ [Home] No degree found in quizInfo');
+        }
+      } else {
+        debugPrint('⚠️ [Home] No quiz data found for user');
+      }
+    } catch (e) {
+      debugPrint('❌ [Home] Error loading quiz stream: $e');
+    }
+  }
+
+  /// Load mentors from Supabase
+  Future<void> _loadMentors() async {
+    try {
+      debugPrint('🔍 [Home] Loading mentors from Supabase...');
+      final response = await Supabase.instance.client
+          .from('mentor')
+          .select()
+          .order('rating', ascending: false)
+          .limit(10);
+
+      debugPrint('✅ [Home] Mentors loaded: ${response.length} mentors found');
+
+      if (mounted) {
+        setState(() {
+          mentors = List<Map<String, dynamic>>.from(response);
+        });
+      }
+    } catch (e) {
+      debugPrint('❌ [Home] Error loading mentors: $e');
+      // Keep the default mentors if loading fails
+    }
+  }
+
+  /// Load colleges from Supabase
+  Future<void> _loadColleges() async {
+    try {
+      debugPrint('🔍 [Home] Loading colleges from Supabase...');
+      debugPrint(
+        '🔍 [Home] Quiz done: $_isQuizDone, User stream: $_userStream, User degrees: $_userDegrees',
+      );
+
+      // Load user's colleges with diverse selection for dashboard
+      final response = await Supabase.instance.client
+          .from('colleges')
+          .select()
+          .eq('user_id', _userId)
+          .limit(30);
+
+      debugPrint('✅ [Home] Raw response: $response');
+      debugPrint('✅ [Home] Response type: ${response.runtimeType}');
+
+      debugPrint('✅ [Home] Colleges loaded: ${response.length} colleges found');
+
+        if (mounted) {
+          List<Map<String, dynamic>> allColleges = response
+              .map((item) {
+                try {
+                  return Map<String, dynamic>.from(item as Map);
+                } catch (e) {
+                  debugPrint('Error converting item: $e');
+                  return <String, dynamic>{};
+                }
+              })
+              .where((college) => college.isNotEmpty)
+              .toList();
+
+          // If quiz is done and stream/degrees are available, filter and sort colleges
+          debugPrint(
+            '🔍 [Home] Quiz status check: isQuizDone=$_isQuizDone, userStream="$_userStream", userDegrees=$_userDegrees',
+          );
+
+          if (_isQuizDone &&
+              (_userStream.isNotEmpty || _userDegrees.isNotEmpty)) {
+            debugPrint(
+              '🎯 [Home] Filtering colleges for stream: $_userStream, degrees: $_userDegrees',
+            );
+
+            // Split into matching and non-matching colleges
+            List<Map<String, dynamic>> matchingColleges = [];
+            List<Map<String, dynamic>> otherColleges = [];
+
+            for (var college in allColleges) {
+              final bestSuitForRaw = college['career'];
+              final streamLower = _userStream.toLowerCase();
+
+              // Handle best_suit_for as either List or String
+              List<String> bestSuitForList = [];
+              if (bestSuitForRaw is List) {
+                bestSuitForList = bestSuitForRaw
+                    .map((item) => item.toString().toLowerCase())
+                    .toList();
+              } else if (bestSuitForRaw != null) {
+                bestSuitForList = [bestSuitForRaw.toString().toLowerCase()];
+              }
+
+              debugPrint(
+                '🔍 Checking college: ${college['name']}, career: $bestSuitForList',
+              );
+
+              // Check if any item in best_suit_for matches the stream OR degrees
+              bool matches = false;
+              String matchReason = '';
+
+              // Check against stream if available
+              if (_userStream.isNotEmpty) {
+                for (var suitItem in bestSuitForList) {
+                  // Direct match
+                  if (suitItem.contains(streamLower) ||
+                      streamLower.contains(suitItem)) {
+                    matches = true;
+                    matchReason =
+                        'stream match: "$suitItem" with "$streamLower"';
+                    break;
+                  }
+
+                  // Word-by-word matching
+                  final streamWords = streamLower.split(' ');
+                  final suitWords = suitItem.split(' ');
+
+                  for (var streamWord in streamWords) {
+                    if (streamWord.length > 2 &&
+                        suitItem.contains(streamWord)) {
+                      matches = true;
+                      matchReason = 'stream word "$streamWord" in "$suitItem"';
+                      break;
+                    }
+                  }
+
+                  if (matches) break;
+
+                  for (var suitWord in suitWords) {
+                    if (suitWord.length > 2 && streamLower.contains(suitWord)) {
+                      matches = true;
+                      matchReason = 'suit word "$suitWord" in stream';
+                      break;
+                    }
+                  }
+
+                  if (matches) break;
+                }
+              }
+
+              // Check against degrees if not already matched
+              if (!matches && _userDegrees.isNotEmpty) {
+                for (var degree in _userDegrees) {
+                  for (var suitItem in bestSuitForList) {
+                    if (suitItem.contains(degree) ||
+                        degree.contains(suitItem)) {
+                      matches = true;
+                      matchReason = 'degree match: "$degree" with "$suitItem"';
+                      break;
+                    }
+
+                    // Check degree abbreviations (e.g., "btech" matches "b.tech")
+                    String degreeClean = degree
+                        .replaceAll('.', '')
+                        .replaceAll(' ', '');
+                    String suitClean = suitItem
+                        .replaceAll('.', '')
+                        .replaceAll(' ', '');
+
+                    if (degreeClean.contains(suitClean) ||
+                        suitClean.contains(degreeClean)) {
+                      matches = true;
+                      matchReason =
+                          'degree abbreviation match: "$degreeClean" with "$suitClean"';
+                      break;
+                    }
+                  }
+                  if (matches) break;
+                }
+              }
+
+              if (matches) {
+                matchingColleges.add(college);
+                debugPrint('✅ MATCHED: ${college['name']} ($matchReason)');
+              } else {
+                otherColleges.add(college);
+                debugPrint('❌ NO MATCH: ${college['name']}');
+              }
+            }
+
+            // Combine: matching colleges first, then others
+            allColleges = [...matchingColleges, ...otherColleges];
+            debugPrint(
+              '✅ [Home] Filtered: ${matchingColleges.length} matching, ${otherColleges.length} others',
+            );
+          } else {
+            debugPrint(
+              '📋 [Home] Showing all colleges (quiz not done or no stream)',
+            );
+          }
+
+          setState(() {
+            colleges = allColleges;
+          });
+          debugPrint('✅ [Home] Colleges state updated: ${colleges.length} colleges');
+        }
+    } catch (e) {
+      debugPrint('❌ [Home] Error loading colleges: $e');
+      debugPrint('❌ [Home] Stack trace: ${StackTrace.current}');
+      // Keep empty list if loading fails
+    }
+  }
+
   /// Load user profile data
   Future<void> _loadUserProfile() async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null) {
+        setState(() {
+          _userId = user.id;
+        });
+
         final response = await Supabase.instance.client
-            .from('profiles')
+            .from('users')
             .select()
             .eq('id', user.id)
             .maybeSingle();
-        
-        if (response != null && response['full_name'] != null) {
+
+        if (response != null && response['userName'] != null) {
           setState(() {
-            _userName = response['full_name'];
-            _userInitial = response['full_name'][0].toUpperCase();
+            _userName = response['userName'];
+            _userInitial = response['userName'][0].toUpperCase();
+
+            // Get user status (profession) and focus
+            if (response['current_status'] != null) {
+              _userStatus = response['current_status'];
+            } else if (response['profession'] != null) {
+              _userStatus = response['profession'];
+            }
+
+            if (response['mainFocus'] != null) {
+              _userFocus = response['mainFocus'];
+            } else if (response['focus'] != null) {
+              _userFocus = response['focus'];
+            }
+
+            // Get quiz completion status
+            if (response['isQuizDone'] != null) {
+              _isQuizDone = response['isQuizDone'] == true;
+            }
           });
+
+          // Load quiz stream if quiz is done
+          if (_isQuizDone) {
+            await _loadQuizStream();
+          }
         } else {
           setState(() {
             _userName = user.email?.split('@')[0] ?? 'User';
@@ -142,6 +494,7 @@ class _HomePageState extends State<HomePage> {
     } catch (e) {
       final user = Supabase.instance.client.auth.currentUser;
       setState(() {
+        _userId = user?.id ?? '';
         _userName = user?.email?.split('@')[0] ?? 'User';
         _userInitial = _userName[0].toUpperCase();
       });
@@ -167,6 +520,8 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    HomePageState._refreshCallback = null;
+    WidgetsBinding.instance.removeObserver(this);
     _carouselTimer?.cancel();
     _pageController.dispose();
     _careerBannerController.dispose();
@@ -176,11 +531,11 @@ class _HomePageState extends State<HomePage> {
   // ============================================================================
   // BUILD METHOD - Main Widget Tree
   // ============================================================================
-  
+
   @override
   Widget build(BuildContext context) {
     /// Helper function to determine which page to display based on bottom nav selection
-    Widget _getBodyContent() {
+    Widget getBodyContent() {
       switch (_bottomNavIndex) {
         case 1: // Calendar Tab
           return CalendarPage();
@@ -189,32 +544,43 @@ class _HomePageState extends State<HomePage> {
         case 3: // Profile Tab (placeholder)
           return _buildProfilePage();
         default: // Home Tab (case 0)
-          return SingleChildScrollView(
-            child: Column(
-              children: [
-                _buildTopSearchBar(),
-                SizedBox(height: 12),
-                _buildHeroBanner(),
-                SizedBox(height: 16),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Column(
-                    children: [
-                      _buildWelcomeSection(),
-                      SizedBox(height: 16),
-                      _buildAIToolsCards(),
-                      SizedBox(height: 16),
-                      _buildRecommendedMentors(),
-                      SizedBox(height: 20),
-                      _buildCareerBanners(),
-                      SizedBox(height: 20),
-                      _buildDiscoverColleges(),
-                      SizedBox(height: 80), // Extra space for bottom nav
-                    ],
+          return Column(
+            children: [
+              _buildTopSearchBar(),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: _refreshData,
+                  color: Color(0xFF5E9EF5),
+                  child: SingleChildScrollView(
+                    physics: AlwaysScrollableScrollPhysics(),
+                    child: Column(
+                      children: [
+                        SizedBox(height: 12),
+                        _buildHeroBanner(),
+                        SizedBox(height: 16),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 12),
+                          child: Column(
+                            children: [
+                              _buildWelcomeSection(),
+                              SizedBox(height: 16),
+                              _buildAIToolsCards(),
+                              SizedBox(height: 16),
+                              _buildRecommendedMentors(),
+                              SizedBox(height: 20),
+                              _buildCareerBanners(),
+                              SizedBox(height: 20),
+                              _buildDiscoverColleges(),
+                              SizedBox(height: 80), // Extra space for bottom nav
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           );
       }
     }
@@ -223,7 +589,7 @@ class _HomePageState extends State<HomePage> {
       key: _scaffoldKey,
       backgroundColor: Color(0xFFF5F7FA),
       drawer: Drawer(child: _buildSidebar()),
-      body: _getBodyContent(),
+      body: getBodyContent(),
       bottomNavigationBar: _buildBottomNavigationBar(),
     );
   }
@@ -231,7 +597,7 @@ class _HomePageState extends State<HomePage> {
   // ============================================================================
   // SIDEBAR - Left Navigation Drawer
   // ============================================================================
-  
+
   /// Build the sidebar navigation drawer with logo, menu items, and user profile
   Widget _buildSidebar() {
     return Container(
@@ -289,19 +655,32 @@ class _HomePageState extends State<HomePage> {
                 SizedBox(height: 12),
                 Row(
                   children: [
-                    Text('Connect', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    Text(
+                      'Connect',
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
                     Text('  •  ', style: TextStyle(color: Colors.white70)),
-                    Text('Learn', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    Text(
+                      'Learn',
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
                     Text('  •  ', style: TextStyle(color: Colors.white70)),
-                    Text('Grow', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    Text(
+                      'Grow',
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
                   ],
                 ),
               ],
             ),
           ),
 
-          Divider(color: Colors.white.withOpacity(0.1), thickness: 1, height: 1),
-          
+          Divider(
+            color: Colors.white.withValues(alpha: 0.1),
+            thickness: 1,
+            height: 1,
+          ),
+
           SizedBox(height: 12),
 
           // ============================================================
@@ -312,8 +691,71 @@ class _HomePageState extends State<HomePage> {
               padding: EdgeInsets.symmetric(horizontal: 12),
               children: [
                 _buildNavItem(Icons.home_rounded, 'Home', 0, false),
-                _buildNavItem(Icons.people_alt_rounded, 'Mentor Connect', 1, false),
-                _buildNavItem(Icons.bar_chart_rounded, 'Career Board', 2, false),
+                Container(
+                  margin: EdgeInsets.symmetric(vertical: 1),
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ListTile(
+                    leading: Icon(
+                      Icons.people_alt_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                    title: Text(
+                      'Mentor Connect',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                    dense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 0,
+                    ),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => MentorConnectPage(),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                Material(
+                  color: Colors.transparent,
+                  child: ListTile(
+                    leading: Icon(
+                      Icons.bar_chart_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    title: Text(
+                      'Career Board',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 0,
+                    ),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => CareerBoardPage(),
+                        ),
+                      );
+                    },
+                  ),
+                ),
                 _buildNavItem(Icons.route_rounded, 'My Tracks', 3, true),
 
                 SizedBox(height: 12),
@@ -328,22 +770,29 @@ class _HomePageState extends State<HomePage> {
                     });
                   },
                   child: Padding(
-                    padding: EdgeInsets.only(left: 12, right: 12, top: 8, bottom: 12),
+                    padding: EdgeInsets.only(
+                      left: 12,
+                      right: 12,
+                      top: 8,
+                      bottom: 12,
+                    ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
                           'AI TOOLS',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
+                            color: Colors.white.withValues(alpha: 0.5),
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                             letterSpacing: 1.2,
                           ),
                         ),
                         Icon(
-                          _isAiToolsExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                          color: Colors.white.withOpacity(0.5),
+                          _isAiToolsExpanded
+                              ? Icons.keyboard_arrow_up
+                              : Icons.keyboard_arrow_down,
+                          color: Colors.white.withValues(alpha: 0.5),
                           size: 18,
                         ),
                       ],
@@ -353,25 +802,49 @@ class _HomePageState extends State<HomePage> {
 
                 if (_isAiToolsExpanded) ...[
                   // AI Career Coach - Navigate to CareerCoachPage
-                  _buildSubNavItem(Icons.school_rounded, 'AI Career Coach', false, onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => CareerCoachPage()),
-                    );
-                  }),
+                  _buildSubNavItem(
+                    Icons.school_rounded,
+                    'AI Career Coach',
+                    false,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => CareerCoachPage(),
+                        ),
+                      );
+                    },
+                  ),
                   // AI Roadmap Generator - Navigate to RoadmapPage
-                  _buildSubNavItem(Icons.map_rounded, 'AI Roadmap', false, onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => RoadmapPage()),
-                    );
-                  }),
+                  _buildSubNavItem(
+                    Icons.map_rounded,
+                    'AI Roadmap',
+                    false,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => RoadmapPage()),
+                      );
+                    },
+                  ),
                   // Job Tracker - Coming soon
-                  _buildSubNavItem(Icons.work_outline_rounded, 'AI Job Tracker', false),
+                  _buildSubNavItem(
+                    Icons.work_outline_rounded,
+                    'AI Job Tracker',
+                    false,
+                  ),
                   // Resume Maker - Pro feature
-                  _buildSubNavItem(Icons.description_outlined, 'AI Resume Maker', true),
+                  _buildSubNavItem(
+                    Icons.description_outlined,
+                    'AI Resume Maker',
+                    true,
+                  ),
                   // Interview Prep - Pro feature
-                  _buildSubNavItem(Icons.mic_outlined, 'AI Interview Prep', true),
+                  _buildSubNavItem(
+                    Icons.mic_outlined,
+                    'AI Interview Prep',
+                    true,
+                  ),
                 ],
               ],
             ),
@@ -464,7 +937,7 @@ class _HomePageState extends State<HomePage> {
                         width: 95,
                         height: 65,
                         decoration: BoxDecoration(
-                          color: Color(0xFF1B2347).withOpacity(0.2),
+                          color: Color(0xFF1B2347).withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Icon(
@@ -522,7 +995,9 @@ class _HomePageState extends State<HomePage> {
             child: Container(
               padding: EdgeInsets.all(16),
               decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
+                border: Border(
+                  top: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                ),
               ),
               child: Row(
                 children: [
@@ -569,7 +1044,7 @@ class _HomePageState extends State<HomePage> {
   // ============================================================================
   // SIDEBAR COMPONENTS - Navigation Items
   // ============================================================================
-  
+
   /// Build a main navigation item for the sidebar
   /// [icon] - Icon to display
   /// [label] - Text label for the nav item
@@ -626,24 +1101,27 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-
-
   /// Build a sub-navigation item for expandable sections (e.g., AI Tools)
   /// [icon] - Icon to display
   /// [label] - Text label for the nav item
   /// [isPro] - Whether this is a Pro feature (shows Pro badge)
   /// [onTap] - Optional callback when item is tapped
-  Widget _buildSubNavItem(IconData icon, String label, bool isPro, {VoidCallback? onTap}) {
+  Widget _buildSubNavItem(
+    IconData icon,
+    String label,
+    bool isPro, {
+    VoidCallback? onTap,
+  }) {
     return Container(
       margin: EdgeInsets.symmetric(vertical: 1),
       child: ListTile(
-        leading: Icon(icon, color: Colors.white.withOpacity(0.9), size: 20),
+        leading: Icon(icon, color: Colors.white.withValues(alpha: 0.9), size: 20),
         title: Row(
           children: [
             Text(
               label,
               style: TextStyle(
-                color: Colors.white.withOpacity(0.9),
+                color: Colors.white.withValues(alpha: 0.9),
                 fontSize: 14,
                 fontWeight: FontWeight.w400,
               ),
@@ -678,7 +1156,7 @@ class _HomePageState extends State<HomePage> {
   // ============================================================================
   // TOP BAR - Search Bar with Hamburger Menu
   // ============================================================================
-  
+
   /// Build the top search bar with menu button and search functionality
   Widget _buildTopSearchBar() {
     return Container(
@@ -687,7 +1165,7 @@ class _HomePageState extends State<HomePage> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 8,
             offset: Offset(0, 2),
           ),
@@ -699,11 +1177,15 @@ class _HomePageState extends State<HomePage> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: Color(0xFF5E9EF5).withOpacity(0.1),
+              color: Color(0xFF5E9EF5).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: IconButton(
-              icon: Icon(Icons.menu_rounded, color: Color(0xFF5E9EF5), size: 22),
+              icon: Icon(
+                Icons.menu_rounded,
+                color: Color(0xFF5E9EF5),
+                size: 22,
+              ),
               onPressed: () {
                 _scaffoldKey.currentState?.openDrawer();
               },
@@ -791,7 +1273,7 @@ class _HomePageState extends State<HomePage> {
               borderRadius: BorderRadius.circular(10),
               boxShadow: [
                 BoxShadow(
-                  color: Color(0xFF5E9EF5).withOpacity(0.3),
+                  color: Color(0xFF5E9EF5).withValues(alpha: 0.3),
                   blurRadius: 8,
                   offset: Offset(0, 2),
                 ),
@@ -816,7 +1298,7 @@ class _HomePageState extends State<HomePage> {
   // ============================================================================
   // HERO BANNER - Carousel Section
   // ============================================================================
-  
+
   /// Build the hero banner carousel with auto-scrolling cards
   Widget _buildHeroBanner() {
     return Column(
@@ -828,7 +1310,7 @@ class _HomePageState extends State<HomePage> {
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: Color(0xFF5E9EF5).withOpacity(0.3),
+                color: Color(0xFF5E9EF5).withValues(alpha: 0.3),
                 blurRadius: 30,
                 offset: Offset(0, 15),
               ),
@@ -843,32 +1325,44 @@ class _HomePageState extends State<HomePage> {
             },
             children: [
               _buildBannerPage(
-                gradient: [Color(0xFFE8C5E8), Color(0xFFE8C5E8)],
-                title: 'Connect With Skilled Mentors',
-                subtitle: 'Learn from industry experts who will guide you through your professional journey.',
-                imagePath: 'assets/element7.png',
-                buttonColor: Color(0xFFE673E6),
+                gradient: [Color(0xFFE8F5FF), Color(0xFFF5FBFF)],
+                title: 'Manage All Your Bookings Here',
+                subtitle:
+                    'Manage all your bookings and get insights on your progress.',
+                imagePath: 'assets/element5.png',
+                buttonColor: Color(0xFF5E9EF5),
+                buttonText: 'View them',
+                buttonIcon: Icons.visibility,
               ),
               _buildBannerPage(
                 gradient: [Color(0xFFD4E4F7), Color(0xFFD4E4F7)],
                 title: 'Find Your Dream Job Here',
-                subtitle: 'Discover thousands of opportunities that match your skills and aspirations.',
+                subtitle:
+                    'Discover thousands of opportunities that match your skills and aspirations.',
                 imagePath: 'assets/prep2.png',
                 buttonColor: Color(0xFF7CB4F7),
+                buttonText: 'Get Started',
+                buttonIcon: Icons.arrow_forward,
               ),
               _buildBannerPage(
                 gradient: [Color(0xFFFFF4CC), Color(0xFFFFF4CC)],
                 title: 'Build Your Career Path',
-                subtitle: 'Take control of your professional future with our comprehensive career-building tools.',
+                subtitle:
+                    'Take control of your professional future with our comprehensive career-building tools.',
                 imagePath: 'assets/element8.png',
                 buttonColor: Color(0xFFFFD54F),
+                buttonText: 'Get Started',
+                buttonIcon: Icons.arrow_forward,
               ),
               _buildBannerPage(
                 gradient: [Color(0xFFFFCDD2), Color(0xFFFFCDD2)],
                 title: 'Turn Passion Into Profession',
-                subtitle: 'Transform what you love into a successful career. Get guidance, resources, and opportunities.',
+                subtitle:
+                    'Transform what you love into a successful career. Get guidance, resources, and opportunities.',
                 imagePath: 'assets/element2.png',
                 buttonColor: Color(0xFFFF8A95),
+                buttonText: 'Get Started',
+                buttonIcon: Icons.arrow_forward,
               ),
             ],
           ),
@@ -901,12 +1395,16 @@ class _HomePageState extends State<HomePage> {
   /// [subtitle] - Subtitle description
   /// [imagePath] - Path to the banner image
   /// [buttonColor] - Color for the CTA button
+  /// [buttonText] - Text for the button
+  /// [buttonIcon] - Icon for the button
   Widget _buildBannerPage({
     required List<Color> gradient,
     required String title,
     required String subtitle,
     required String imagePath,
     required Color buttonColor,
+    required String buttonText,
+    required IconData buttonIcon,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -940,9 +1438,9 @@ class _HomePageState extends State<HomePage> {
                     decoration: BoxDecoration(
                       gradient: RadialGradient(
                         colors: [
-                          gradient[0].withOpacity(0.15),
-                          gradient[0].withOpacity(0.05),
-                          Colors.white.withOpacity(0),
+                          gradient[0].withValues(alpha: 0.15),
+                          gradient[0].withValues(alpha: 0.05),
+                          Colors.white.withValues(alpha: 0),
                         ],
                         radius: 0.8,
                       ),
@@ -1001,20 +1499,20 @@ class _HomePageState extends State<HomePage> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              'Get Started',
+                              buttonText,
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
+                              ),
                             ),
-                          ),
-                          SizedBox(width: 6),
-                          Icon(Icons.arrow_forward, size: 12),
-                        ],
+                            SizedBox(width: 6),
+                            Icon(buttonIcon, size: 12),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-                )
               ],
             ),
           ),
@@ -1044,7 +1542,7 @@ class _HomePageState extends State<HomePage> {
                         child: Icon(
                           Icons.image_not_supported,
                           size: 80,
-                          color: Colors.white.withOpacity(0.5),
+                          color: Colors.white.withValues(alpha: 0.5),
                         ),
                       );
                     },
@@ -1056,19 +1554,19 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
     );
-             
   }
 
   // ============================================================================
   // WELCOME SECTION - User Greeting
   // ============================================================================
-  
+
   /// Build the welcome section with user greeting
   Widget _buildWelcomeSection() {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
+          flex: 2,
           child: Text(
             'Welcome, $_userName',
             style: TextStyle(
@@ -1076,38 +1574,90 @@ class _HomePageState extends State<HomePage> {
               fontWeight: FontWeight.bold,
               color: Color(0xFF1B2347),
             ),
+            overflow: TextOverflow.visible,
+            maxLines: 1,
           ),
         ),
-        Row(
-          children: [
-            ElevatedButton.icon(
-              onPressed: () {},
-              icon: Icon(Icons.bolt, size: 20),
-              label: Text('Quiz', style: TextStyle(fontSize: 14)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Color(0xFF5E9EF5),
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(horizontal: 22, vertical: 8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
-                ),
+        SizedBox(width: 12),
+        // Step 1: Show Quiz button if quiz not done
+        if (!_isQuizDone)
+          ElevatedButton.icon(
+            onPressed: () {
+              QuizStartDialog.show(
+                context,
+                currentStatus: _userStatus,
+                mainFocus: _userFocus,
+                userName: _userName,
+                userId: _userId,
+                userAvatar: null,
+              );
+            },
+            icon: Icon(Icons.bolt, size: 24),
+            label: Text('Quiz', style: TextStyle(fontSize: 14)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Color(0xFF5E9EF5),
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              minimumSize: Size(100, 40),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
               ),
             ),
-            SizedBox(width: 8),
-            OutlinedButton(
-              onPressed: () {},
-              child: Text('Explore', style: TextStyle(fontSize: 14)),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Color(0xFF1B2347),
-                side: BorderSide(color: Colors.grey[300]!),
-                padding: EdgeInsets.symmetric(horizontal: 22, vertical: 8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
-                ),
+          ),
+
+        // Step 2: Show Plan button if quiz done but no career chosen
+        if (_isQuizDone &&
+            (_userFocus.toLowerCase() == 'choose career paths' ||
+                _userFocus.isEmpty))
+          ElevatedButton.icon(
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => CareerCoachPage()),
+              );
+              // Refresh data when returning from Career Coach
+              _refreshData();
+            },
+            label: Text('Plan your Career', style: TextStyle(fontSize: 14)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Color(0xFF5E9EF5),
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              minimumSize: Size(140, 40),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
               ),
             ),
-          ],
-        ),
+          ),
+
+        // Step 3: Show career card if quiz done AND career chosen (not default)
+        if (_isQuizDone &&
+            _userFocus.isNotEmpty &&
+            _userFocus.toLowerCase() != 'choose career paths')
+          Container(
+            height: 40,
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            decoration: BoxDecoration(
+              color: Color(0xFFF5F7FA),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: Color(0xFF5E9EF5).withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                'Career: $_userFocus',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1B2347),
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -1151,9 +1701,16 @@ class _HomePageState extends State<HomePage> {
               child: _buildAIToolCard(
                 icon: Icons.school,
                 title: 'AI Career Coach',
-                description: 'Unlock your potential with AI-guided career wisdom.',
+                description:
+                    'Unlock your potential with AI-guided career wisdom.',
                 color: Color(0xFF5E9EF5),
                 borderColor: Color(0xFF5E9EF5),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => CareerCoachPage()),
+                  );
+                },
               ),
             ),
             SizedBox(width: 16),
@@ -1161,9 +1718,16 @@ class _HomePageState extends State<HomePage> {
               child: _buildAIToolCard(
                 icon: Icons.map,
                 title: 'AI Roadmap Maker',
-                description: 'Chart your journey with a clear, personalized path..',
+                description:
+                    'Chart your journey with a clear, personalized path..',
                 color: Color(0xFFFFA726),
                 borderColor: Color(0xFFFFA726),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => RoadmapPage()),
+                  );
+                },
               ),
             ),
           ],
@@ -1177,7 +1741,8 @@ class _HomePageState extends State<HomePage> {
                 child: _buildAIToolCard(
                   icon: Icons.people,
                   title: 'Connect Mentors',
-                  description: 'Learn from mentors who\'ve walked the path before you.',
+                  description:
+                      'Learn from mentors who\'ve walked the path before you.',
                   color: Color(0xFFE91E63),
                   borderColor: Color(0xFFE91E63),
                 ),
@@ -1201,7 +1766,8 @@ class _HomePageState extends State<HomePage> {
                 child: _buildAIToolCard(
                   icon: Icons.dashboard,
                   title: 'Career Board',
-                  description: 'Get Latest Industry insights, resources and opportunities',
+                  description:
+                      'Get Latest Industry insights, resources and opportunities',
                   color: Color(0xFF4CAF50),
                   borderColor: Color(0xFF4CAF50),
                 ),
@@ -1211,7 +1777,8 @@ class _HomePageState extends State<HomePage> {
                 child: _buildAIToolCard(
                   icon: Icons.description,
                   title: 'AI Resume Maker',
-                  description: 'Transform your resume into a recruiter-ready story.',
+                  description:
+                      'Transform your resume into a recruiter-ready story.',
                   color: Color(0xFF9C27B0),
                   borderColor: Color(0xFF9C27B0),
                 ),
@@ -1229,62 +1796,66 @@ class _HomePageState extends State<HomePage> {
     required String description,
     required Color color,
     required Color borderColor,
+    VoidCallback? onTap,
   }) {
-    return Container(
-      height: 90,
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border(left: BorderSide(color: borderColor, width: 4)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 12,
-            offset: Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            padding: EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(8),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 90,
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border(left: BorderSide(color: borderColor, width: 4)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: Offset(0, 3),
             ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1B2347),
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  description,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey[600],
-                    height: 1.3,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: color, size: 20),
             ),
-          ),
-        ],
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1B2347),
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.grey[600],
+                      height: 1.3,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1292,7 +1863,7 @@ class _HomePageState extends State<HomePage> {
   // ============================================================================
   // RECOMMENDED MENTORS - Mentor Cards Carousel
   // ============================================================================
-  
+
   /// Build the recommended mentors section with horizontal scroll
   Widget _buildRecommendedMentors() {
     return Container(
@@ -1302,7 +1873,7 @@ class _HomePageState extends State<HomePage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 20,
             offset: Offset(0, 4),
           ),
@@ -1329,7 +1900,14 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
               OutlinedButton(
-                onPressed: () {},
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => MentorConnectPage(),
+                    ),
+                  );
+                },
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Color(0xFF5E9EF5),
                   side: BorderSide(color: Colors.grey[300]!, width: 1),
@@ -1356,7 +1934,7 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
           SizedBox(height: 10),
-          Container(
+          SizedBox(
             height: 280,
             child: mentors.isEmpty
                 ? Center(
@@ -1386,20 +1964,17 @@ class _HomePageState extends State<HomePage> {
       [Color(0xFFB5D5FF), Color(0xFFD5E5FF)],
     ];
     final gradient = gradients[mentor['id'].hashCode % gradients.length];
-    
+
     return Container(
       width: 200,
       margin: EdgeInsets.only(right: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.grey[200]!,
-          width: 1,
-        ),
+        border: Border.all(color: Colors.grey[200]!, width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 15,
             offset: Offset(0, 0),
             spreadRadius: 2,
@@ -1434,7 +2009,7 @@ class _HomePageState extends State<HomePage> {
                         border: Border.all(color: Colors.white, width: 3),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
+                            color: Colors.black.withValues(alpha: 0.1),
                             blurRadius: 8,
                             offset: Offset(0, 2),
                           ),
@@ -1443,9 +2018,58 @@ class _HomePageState extends State<HomePage> {
                       child: CircleAvatar(
                         radius: 30,
                         backgroundColor: Colors.grey[200],
-                        backgroundImage: AssetImage(mentor['avatar']),
-                        onBackgroundImageError: (exception, stackTrace) {},
-                        child: Container(),
+                        child:
+                            mentor['avatar'] != null &&
+                                mentor['avatar'].toString().isNotEmpty
+                            ? ClipOval(
+                                child: Image.network(
+                                  mentor['avatar'],
+                                  width: 60,
+                                  height: 60,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Center(
+                                      child: Text(
+                                        (mentor['full_name']?[0] ?? 'M')
+                                            .toUpperCase(),
+                                        style: TextStyle(
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  loadingBuilder:
+                                      (context, child, loadingProgress) {
+                                        if (loadingProgress == null) {
+                                          return child;
+                                        }
+                                        return Center(
+                                          child: CircularProgressIndicator(
+                                            value:
+                                                loadingProgress
+                                                        .expectedTotalBytes !=
+                                                    null
+                                                ? loadingProgress
+                                                          .cumulativeBytesLoaded /
+                                                      loadingProgress
+                                                          .expectedTotalBytes!
+                                                : null,
+                                            strokeWidth: 2,
+                                          ),
+                                        );
+                                      },
+                                ),
+                              )
+                            : Text(
+                                (mentor['full_name']?[0] ?? 'M').toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
                       ),
                     ),
                   ),
@@ -1509,14 +2133,10 @@ class _HomePageState extends State<HomePage> {
           SizedBox(height: 5),
           // Expertise
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12 ),
+            padding: EdgeInsets.symmetric(horizontal: 12),
             child: Text(
               'Expertise: ${(mentor['expertise'] as List).join(', ')}',
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.black,
-                height: 1.3,
-              ),
+              style: TextStyle(fontSize: 11, color: Colors.black, height: 1.3),
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -1566,7 +2186,7 @@ class _HomePageState extends State<HomePage> {
   Widget _buildCareerBanners() {
     return Column(
       children: [
-        Container(
+        SizedBox(
           height: 170,
           child: PageView(
             controller: _careerBannerController,
@@ -1579,12 +2199,12 @@ class _HomePageState extends State<HomePage> {
               _buildCareerBanner(
                 backgroundColor: Color(0xFFFFE5E5),
                 borderColor: Color(0xFFFFCCCC),
-                title: "It's Time To Take Your Career To The Next Level And Shine!",
+                title:
+                    "It's Time To Take Your Career To The Next Level And Shine!",
                 titleColor: Color(0xFFD81B60),
                 buttons: [
                   {'text': 'Check Job Listings', 'icon': Icons.mail_outline},
                   {'text': 'Check Courses', 'icon': Icons.book_outlined},
-                  
                 ],
                 buttonColor: Colors.white,
                 buttonTextColor: Color(0xFF1B2347),
@@ -1667,7 +2287,7 @@ class _HomePageState extends State<HomePage> {
               painter: CirclePatternPainter(color: decorativeColor),
             ),
           ),
-          
+
           // Content
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -1683,8 +2303,8 @@ class _HomePageState extends State<HomePage> {
                       imagePath,
                       fit: BoxFit.contain,
                       errorBuilder: (context, error, stackTrace) {
-                        print('Failed to load image: $imagePath');
-                        print('Error: $error');
+                        debugPrint('Failed to load image: $imagePath');
+                        debugPrint('Error: $error');
                         return Column(
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
@@ -1696,7 +2316,10 @@ class _HomePageState extends State<HomePage> {
                             SizedBox(height: 8),
                             Text(
                               'Image not found',
-                              style: TextStyle(fontSize: 10, color: Colors.grey),
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey,
+                              ),
                             ),
                           ],
                         );
@@ -1705,7 +2328,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ),
-              
+
               // Right side - Text and buttons
               Expanded(
                 flex: 5,
@@ -1753,7 +2376,7 @@ class _HomePageState extends State<HomePage> {
                                     borderRadius: BorderRadius.circular(5),
                                   ),
                                   elevation: 2,
-                                  shadowColor: Colors.black.withOpacity(0.15),
+                                  shadowColor: Colors.black.withValues(alpha: 0.15),
                                 ),
                               ),
                             ),
@@ -1774,7 +2397,7 @@ class _HomePageState extends State<HomePage> {
   // ============================================================================
   // BOTTOM NAVIGATION BAR - Main App Navigation
   // ============================================================================
-  
+
   /// Build the bottom navigation bar with Home, Calendar, Chat, Profile tabs
   Widget _buildBottomNavigationBar() {
     return Container(
@@ -1782,7 +2405,7 @@ class _HomePageState extends State<HomePage> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 10,
             offset: Offset(0, -2),
           ),
@@ -1794,6 +2417,11 @@ class _HomePageState extends State<HomePage> {
           setState(() {
             _bottomNavIndex = index;
           });
+
+          // Refresh data when switching back to home tab
+          if (index == 0) {
+            _refreshData();
+          }
         },
         type: BottomNavigationBarType.fixed,
         backgroundColor: Colors.white,
@@ -1824,9 +2452,113 @@ class _HomePageState extends State<HomePage> {
   // ============================================================================
   // DISCOVER COLLEGES - College Cards Showcase
   // ============================================================================
-  
+
   /// Build the discover colleges section with horizontal scrollable cards
   Widget _buildDiscoverColleges() {
+    // Show quiz completion prompt if quiz is not done
+    if (!_isQuizDone) {
+      return Container(
+        padding: EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 20,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: 40, vertical: 50),
+          decoration: BoxDecoration(
+            color: Color(0xFFF5F7FA),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: Color(0xFF5E9EF5).withValues(alpha: 0.3),
+              width: 2,
+              strokeAlign: BorderSide.strokeAlignInside,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Title
+              Text(
+                'Complete Your Quiz To Unlock Your Career Potential',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1B2347),
+                  height: 1.3,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              SizedBox(height: 50),
+              // Center Icon
+              Container(
+                padding: EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Color(0xFF5E9EF5), width: 3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0xFF5E9EF5).withValues(alpha: 0.2),
+                      blurRadius: 20,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  Icons.add_rounded,
+                  size: 42,
+                  color: Color(0xFF5E9EF5),
+                ),
+              ),
+              SizedBox(height: 50),
+              // Get Started Button
+              ElevatedButton.icon(
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => QuizStartDialog(
+                      currentStatus: _userStatus,
+                      mainFocus: _userFocus,
+                      userName: _userName,
+                      userId: _userId,
+                    ),
+                  );
+                },
+                icon: Icon(Icons.show_chart, size: 20),
+                label: Text(
+                  'Get Started',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Color(0xFF5E9EF5),
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 3,
+                  shadowColor: Color(0xFF5E9EF5).withValues(alpha: 0.4),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Show colleges list if quiz is done
     return Container(
       padding: EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -1834,7 +2566,7 @@ class _HomePageState extends State<HomePage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 20,
             offset: Offset(0, 4),
           ),
@@ -1857,7 +2589,11 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   SizedBox(width: 10),
-                  Icon(Icons.apartment_rounded, color: Color(0xFF5E9EF5), size: 22),
+                  Icon(
+                    Icons.apartment_rounded,
+                    color: Color(0xFF5E9EF5),
+                    size: 22,
+                  ),
                 ],
               ),
               OutlinedButton(
@@ -1897,45 +2633,46 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           SizedBox(height: 16),
-          Container(
+          SizedBox(
             height: 260,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                _buildCollegeCard(
-                  name: 'DR BR AMBEDKAR NATIONAL INSTITUTE OF TECHNOLOGY - [NIT]',
-                  location: 'Jalandhar, Punjab',
-                  fees: '₹ 1,64,000',
-                  placement: '₹ 52,00,000',
-                  type: 'government',
-                  courses: ['BE', 'B.TECH'],
-                ),
-                _buildCollegeCard(
-                  name: 'THAPAR INSTITUTE OF ENGINEERING AND TECHNOLOGY - [THAPAR UNIVERSITY]',
-                  location: 'Patiala, Punjab',
-                  fees: '₹ 5,08,000',
-                  placement: '₹ 1,23,00,000',
-                  type: 'private',
-                  courses: ['BE', 'B.TECH'],
-                ),
-                _buildCollegeCard(
-                  name: 'KANYA MAHAVIDYALAYA - [KMV]',
-                  location: 'Jalandhar, Punjab',
-                  fees: '₹ 20,510',
-                  placement: 'N/A',
-                  type: 'private',
-                  courses: ['B.SC'],
-                ),
-                _buildCollegeCard(
-                  name: 'LOVELY PROFESSIONAL UNIVERSITY - [LPU]',
-                  location: 'Jalandhar, Punjab',
-                  fees: '₹ 1,50,000',
-                  placement: '₹ 42,00,000',
-                  type: 'private',
-                  courses: ['BE'],
-                ),
-              ],
-            ),
+            child: colleges.isEmpty
+                ? Center(
+                    child: CircularProgressIndicator(color: Color(0xFF5E9EF5)),
+                  )
+                : ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: colleges.length,
+                    itemBuilder: (context, index) {
+                      try {
+                        final college = colleges[index];
+                        final collegeName =
+                            college['name']?.toString() ??
+                            'College Name';
+                        final location =
+                            college['location']?.toString() ?? 'India';
+                        final fees = college['fees']?.toString() ?? 'N/A';
+                        final placement =
+                            college['placement']?.toString() ?? 'N/A';
+                        final type = college['type']?.toString() ?? 'Institution';
+                        final bestSuitFor =
+                            college['career']?.toString() ?? 'N/A';
+
+                        return _buildCollegeCard(
+                          name: collegeName,
+                          location: location,
+                          fees: fees,
+                          placement: placement,
+                          type: type,
+                          bestSuitFor: bestSuitFor,
+                        );
+                      } catch (e) {
+                        debugPrint(
+                          'Error building college card at index $index: $e',
+                        );
+                        return SizedBox.shrink();
+                      }
+                    },
+                  ),
           ),
         ],
       ),
@@ -1948,13 +2685,14 @@ class _HomePageState extends State<HomePage> {
   /// [fees] - Fee structure
   /// [placement] - Placement package
   /// [type] - College type (government/private)
+  /// [bestSuitFor] - Best suited for description
   Widget _buildCollegeCard({
     required String name,
     required String location,
     required String fees,
     required String placement,
     required String type,
-    required List<String> courses,
+    required String bestSuitFor,
   }) {
     return Container(
       width: 320,
@@ -1965,7 +2703,7 @@ class _HomePageState extends State<HomePage> {
         border: Border.all(color: Colors.grey[200]!, width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: Offset(0, 2),
           ),
@@ -1994,11 +2732,15 @@ class _HomePageState extends State<HomePage> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   SizedBox(height: 8),
-                  
+
                   // Location
                   Row(
                     children: [
-                      Icon(Icons.location_on, size: 14, color: Colors.grey[600]),
+                      Icon(
+                        Icons.location_on,
+                        size: 14,
+                        color: Colors.grey[600],
+                      ),
                       SizedBox(width: 4),
                       Expanded(
                         child: Text(
@@ -2014,14 +2756,18 @@ class _HomePageState extends State<HomePage> {
                     ],
                   ),
                   SizedBox(height: 14),
-                  
+
                   // 1st Year Fees
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.account_balance_wallet, size: 15, color: Color(0xFF1B2347)),
+                          Icon(
+                            Icons.account_balance_wallet,
+                            size: 15,
+                            color: Color(0xFF1B2347),
+                          ),
                           SizedBox(width: 6),
                           Text(
                             '1st Year Fees',
@@ -2043,14 +2789,18 @@ class _HomePageState extends State<HomePage> {
                     ],
                   ),
                   SizedBox(height: 10),
-                  
+
                   // Highest Placement
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.trending_up, size: 15, color: Color(0xFF1B2347)),
+                          Icon(
+                            Icons.trending_up,
+                            size: 15,
+                            color: Color(0xFF1B2347),
+                          ),
                           SizedBox(width: 6),
                           Text(
                             'Highest Placement',
@@ -2072,7 +2822,7 @@ class _HomePageState extends State<HomePage> {
                     ],
                   ),
                   SizedBox(height: 10),
-                  
+
                   // Type
                   Row(
                     children: [
@@ -2088,7 +2838,7 @@ class _HomePageState extends State<HomePage> {
                     ],
                   ),
                   SizedBox(height: 14),
-                  
+
                   // Best suited for
                   Row(
                     children: [
@@ -2099,40 +2849,37 @@ class _HomePageState extends State<HomePage> {
                         style: TextStyle(
                           fontSize: 11,
                           color: Color(0xFF1B2347),
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
                   ),
-                  SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: courses.map((course) {
-                      return Container(
-                        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: course == 'B.SC' ? Color(0xFF4CAF50) : Color(0xFFFF6B9D),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Text(
-                          course,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: course == 'B.SC' ? Color(0xFF4CAF50) : Color(0xFFFF6B9D),
-                          ),
-                        ),
-                      );
-                    }).toList(),
+                  SizedBox(height: 6),
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Color(0xFFF5F7FA),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: Color(0xFF5E9EF5).withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      bestSuitFor,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF1B2347),
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
             ),
-            
+
             // Decorative pattern image
             Positioned(
               bottom: 0,
@@ -2143,7 +2890,7 @@ class _HomePageState extends State<HomePage> {
                 height: 80,
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
-                  return Container(
+                  return SizedBox(
                     width: 100,
                     height: 80,
                     child: CustomPaint(
@@ -2163,6 +2910,8 @@ class _HomePageState extends State<HomePage> {
 
 // Placeholder widgets - replace with actual implementations
 class SlidingCards extends StatelessWidget {
+  const SlidingCards({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -2177,6 +2926,8 @@ class SlidingCards extends StatelessWidget {
 }
 
 class WelcomeSection extends StatelessWidget {
+  const WelcomeSection({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -2196,6 +2947,8 @@ class WelcomeSection extends StatelessWidget {
 }
 
 class ActionsButtons extends StatelessWidget {
+  const ActionsButtons({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -2209,6 +2962,8 @@ class ActionsButtons extends StatelessWidget {
 }
 
 class ActionBox extends StatelessWidget {
+  const ActionBox({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -2225,7 +2980,7 @@ class ActionBox extends StatelessWidget {
 class MentorsSection extends StatelessWidget {
   final List<Map<String, dynamic>> mentors;
 
-  MentorsSection({required this.mentors});
+  const MentorsSection({super.key, required this.mentors});
 
   @override
   Widget build(BuildContext context) {
@@ -2258,7 +3013,7 @@ class MentorsSection extends StatelessWidget {
             ],
           ),
           SizedBox(height: 16),
-          Container(
+          SizedBox(
             height: 300,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
@@ -2294,7 +3049,7 @@ class MentorsSection extends StatelessWidget {
                                 width: 20,
                                 height: 20,
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.25),
+                                  color: Colors.white.withValues(alpha: 0.25),
                                   borderRadius: BorderRadius.only(
                                     topRight: Radius.circular(16),
                                     bottomLeft: Radius.circular(16),
@@ -2309,7 +3064,7 @@ class MentorsSection extends StatelessWidget {
                                 width: 20,
                                 height: 20,
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.3),
+                                  color: Colors.white.withValues(alpha: 0.3),
                                   borderRadius: BorderRadius.only(
                                     topRight: Radius.circular(16),
                                     bottomLeft: Radius.circular(16),
@@ -2386,6 +3141,11 @@ class MentorsSection extends StatelessWidget {
                             SizedBox(height: 8),
                             ElevatedButton(
                               onPressed: () {},
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                                textStyle: TextStyle(fontSize: 12),
+                              ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -2393,11 +3153,6 @@ class MentorsSection extends StatelessWidget {
                                   SizedBox(width: 4),
                                   Icon(Icons.screen_share, size: 14),
                                 ],
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue,
-                                foregroundColor: Colors.white,
-                                textStyle: TextStyle(fontSize: 12),
                               ),
                             ),
                           ],
@@ -2428,39 +3183,45 @@ class CollegePatternPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Color(0xFFFF6B9D).withOpacity(0.15)
+      ..color = Color(0xFFFF6B9D).withValues(alpha: 0.15)
       ..style = PaintingStyle.fill;
 
     // Draw diagonal wavy pattern
     final path = Path();
     path.moveTo(size.width * 0.3, size.height);
     path.quadraticBezierTo(
-      size.width * 0.4, size.height * 0.8,
-      size.width * 0.5, size.height * 0.85,
+      size.width * 0.4,
+      size.height * 0.8,
+      size.width * 0.5,
+      size.height * 0.85,
     );
     path.lineTo(size.width, size.height * 0.5);
     path.lineTo(size.width, size.height);
     path.close();
     canvas.drawPath(path, paint);
 
-    paint.color = Color(0xFFFF6B9D).withOpacity(0.2);
+    paint.color = Color(0xFFFF6B9D).withValues(alpha: 0.2);
     final path2 = Path();
     path2.moveTo(size.width * 0.5, size.height);
     path2.quadraticBezierTo(
-      size.width * 0.6, size.height * 0.75,
-      size.width * 0.7, size.height * 0.8,
+      size.width * 0.6,
+      size.height * 0.75,
+      size.width * 0.7,
+      size.height * 0.8,
     );
     path2.lineTo(size.width, size.height * 0.4);
     path2.lineTo(size.width, size.height);
     path2.close();
     canvas.drawPath(path2, paint);
 
-    paint.color = Color(0xFFFF6B9D).withOpacity(0.25);
+    paint.color = Color(0xFFFF6B9D).withValues(alpha: 0.25);
     final path3 = Path();
     path3.moveTo(size.width * 0.7, size.height);
     path3.quadraticBezierTo(
-      size.width * 0.8, size.height * 0.7,
-      size.width * 0.9, size.height * 0.75,
+      size.width * 0.8,
+      size.height * 0.7,
+      size.width * 0.9,
+      size.height * 0.75,
     );
     path3.lineTo(size.width, size.height * 0.3);
     path3.lineTo(size.width, size.height);
@@ -2481,7 +3242,7 @@ class CirclePatternPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = color.withOpacity(0.15)
+      ..color = color.withValues(alpha: 0.15)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
 
@@ -2509,8 +3270,9 @@ class _ProfilePageWidget extends StatefulWidget {
 }
 
 class _ProfilePageWidgetState extends State<_ProfilePageWidget> {
-  Map<String, dynamic>? _profile;
+  Map<String, dynamic>? _userData;
   bool _loading = true;
+  String? _profilePhotoUrl;
 
   @override
   void initState() {
@@ -2522,18 +3284,26 @@ class _ProfilePageWidgetState extends State<_ProfilePageWidget> {
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null) {
+        // Get Google profile photo if available
+        final userMetadata = user.userMetadata;
+        if (userMetadata != null && userMetadata['avatar_url'] != null) {
+          _profilePhotoUrl = userMetadata['avatar_url'];
+        }
+
+        // Load user data from users table
         final response = await Supabase.instance.client
-            .from('profiles')
+            .from('users')
             .select()
             .eq('id', user.id)
             .maybeSingle();
-        
+
         setState(() {
-          _profile = response;
+          _userData = response;
           _loading = false;
         });
       }
     } catch (e) {
+      debugPrint('Error loading profile: $e');
       setState(() => _loading = false);
     }
   }
@@ -2541,44 +3311,55 @@ class _ProfilePageWidgetState extends State<_ProfilePageWidget> {
   @override
   Widget build(BuildContext context) {
     final user = Supabase.instance.client.auth.currentUser;
-    
+
     if (_loading) {
       return Center(child: CircularProgressIndicator());
     }
-    
+
     return SingleChildScrollView(
       child: Padding(
         padding: EdgeInsets.all(24),
         child: Column(
           children: [
             SizedBox(height: 40),
-            
-            // User Avatar
+
+            // User Avatar with Google Photo
             Container(
               width: 120,
               height: 120,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [Color(0xFF1B2347), Color(0xFF2D3A6F)],
-                ),
+                gradient: _profilePhotoUrl == null
+                    ? LinearGradient(
+                        colors: [Color(0xFF1B2347), Color(0xFF2D3A6F)],
+                      )
+                    : null,
+                image: _profilePhotoUrl != null
+                    ? DecorationImage(
+                        image: NetworkImage(_profilePhotoUrl!),
+                        fit: BoxFit.cover,
+                      )
+                    : null,
               ),
-              child: Center(
-                child: Text(
-                  _profile?['full_name']?.substring(0, 1).toUpperCase() ?? 'U',
-                  style: TextStyle(
-                    fontSize: 48,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
+              child: _profilePhotoUrl == null
+                  ? Center(
+                      child: Text(
+                        _userData?['userName']?.substring(0, 1).toUpperCase() ??
+                            'U',
+                        style: TextStyle(
+                          fontSize: 48,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    )
+                  : null,
             ),
             SizedBox(height: 24),
-            
+
             // User Name
             Text(
-              _profile?['full_name'] ?? 'User',
+              _userData?['userName'] ?? 'User',
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
@@ -2586,18 +3367,15 @@ class _ProfilePageWidgetState extends State<_ProfilePageWidget> {
               ),
             ),
             SizedBox(height: 8),
-            
+
             // User Email
             Text(
               user?.email ?? '',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
             ),
-            
+
             SizedBox(height: 40),
-            
+
             // Profile Details Card
             Container(
               constraints: BoxConstraints(maxWidth: 500),
@@ -2607,7 +3385,7 @@ class _ProfilePageWidgetState extends State<_ProfilePageWidget> {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 10,
                     offset: Offset(0, 4),
                   ),
@@ -2625,26 +3403,94 @@ class _ProfilePageWidgetState extends State<_ProfilePageWidget> {
                     ),
                   ),
                   SizedBox(height: 20),
-                  
-                  if (_profile?['phone'] != null && _profile!['phone'].toString().isNotEmpty)
-                    _buildInfoRow(Icons.phone, 'Phone', _profile!['phone']),
-                  
-                  if (_profile?['bio'] != null && _profile!['bio'].toString().isNotEmpty) ...[
-                    SizedBox(height: 16),
-                    _buildInfoRow(Icons.info_outline, 'Bio', _profile!['bio']),
-                  ],
-                  
-                  SizedBox(height: 16),
+
+                  // Email
                   _buildInfoRow(Icons.email, 'Email', user?.email ?? ''),
-                  
+
+                  // Phone
+                  if (_userData?['userPhone'] != null &&
+                      _userData!['userPhone'].toString().isNotEmpty) ...[
+                    SizedBox(height: 16),
+                    _buildInfoRow(
+                      Icons.phone,
+                      'Phone',
+                      _userData!['userPhone'],
+                    ),
+                  ],
+
+                  // Current Status (Profession)
+                  if (_userData?['current_status'] != null &&
+                      _userData!['current_status'].toString().isNotEmpty) ...[
+                    SizedBox(height: 16),
+                    _buildInfoRow(
+                      Icons.school,
+                      'Current Status',
+                      _userData!['current_status'],
+                    ),
+                  ],
+
+                  // Institution
+                  if (_userData?['institutionName'] != null &&
+                      _userData!['institutionName'].toString().isNotEmpty) ...[
+                    SizedBox(height: 16),
+                    _buildInfoRow(
+                      Icons.location_city,
+                      'Institution',
+                      _userData!['institutionName'],
+                    ),
+                  ],
+
+                  // Main Focus (from quiz)
+                  if (_userData?['mainFocus'] != null &&
+                      _userData!['mainFocus'].toString().isNotEmpty &&
+                      _userData!['mainFocus'].toString().toLowerCase() !=
+                          'choose career paths') ...[
+                    SizedBox(height: 16),
+                    _buildInfoRow(
+                      Icons.lightbulb_outline,
+                      'Focus',
+                      _userData!['mainFocus'],
+                    ),
+                  ],
+
+                  // Career Path (if set)
+                  if (_userData?['mainFocus'] != null &&
+                      _userData!['mainFocus'].toString().isNotEmpty &&
+                      _userData!['mainFocus'].toString().toLowerCase() !=
+                          'choose career paths') ...[
+                    SizedBox(height: 16),
+                    _buildInfoRow(
+                      Icons.work_outline,
+                      'Career Path',
+                      _userData!['mainFocus'],
+                    ),
+                  ],
+
+                  // Quiz Status
                   SizedBox(height: 16),
-                  _buildInfoRow(Icons.fingerprint, 'User ID', user!.id.substring(0, 8) + '...'),
+                  _buildInfoRow(
+                    Icons.quiz,
+                    'Quiz Status',
+                    _userData?['isQuizDone'] == true
+                        ? 'Completed ✓'
+                        : 'Not Completed',
+                  ),
+
+                  // Credits
+                  if (_userData?['remainingCredits'] != null) ...[
+                    SizedBox(height: 16),
+                    _buildInfoRow(
+                      Icons.stars,
+                      'Remaining Credits',
+                      '${_userData!['remainingCredits']} / ${_userData!['totalCredits'] ?? 100}',
+                    ),
+                  ],
                 ],
               ),
             ),
-            
+
             SizedBox(height: 32),
-            
+
             // Logout Button
             Container(
               width: double.infinity,
@@ -2692,10 +3538,7 @@ class _ProfilePageWidgetState extends State<_ProfilePageWidget> {
               SizedBox(height: 4),
               Text(
                 value,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Color(0xFF1B2347),
-                ),
+                style: TextStyle(fontSize: 16, color: Color(0xFF1B2347)),
               ),
             ],
           ),

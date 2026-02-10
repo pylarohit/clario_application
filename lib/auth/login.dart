@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -7,8 +7,6 @@ import 'package:app_links/app_links.dart';
 import '../home/home.dart';
 import '_components/animated_gradient_text_demo.dart';
 import '_components/marquee_demo.dart';
-
-
 
 // Main App Entry Point
 void main() async {
@@ -25,9 +23,6 @@ void main() async {
   runApp(const MyApp());
 }
 
-
-
-
 // Root App Widget
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -41,17 +36,11 @@ class MyApp extends StatelessWidget {
         fontFamily: GoogleFonts.raleway().fontFamily,
       ),
       home: const LoginPage(),
-      routes: {
-        '/home': (context) => HomePage(),
-      },
+      routes: {'/home': (context) => HomePage()},
       debugShowCheckedModeBanner: false,
     );
   }
 }
-
-
-
-
 
 // Login Page Stateful Widget
 class LoginPage extends StatefulWidget {
@@ -60,9 +49,6 @@ class LoginPage extends StatefulWidget {
   @override
   State<LoginPage> createState() => _LoginPageState();
 }
-
-
-
 
 // Login Page State Management
 class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
@@ -75,28 +61,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   late ScrollController _scrollController;
   late AnimationController _animationController;
 
-
-
-
   // Initialization and Setup
   @override
   void initState() {
     super.initState();
 
-
-    // Listen to auth state changes
-    Supabase.instance.client.auth.onAuthStateChange.listen((event) {
-      if (event.event == AuthChangeEvent.signedIn && mounted) {
-        Navigator.pushReplacementNamed(context, '/home');
-      }
-    });
-
     _scrollController = ScrollController();
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 20),
-    )
-      ..repeat();
+    )..repeat();
 
     _animationController.addListener(() {
       if (_scrollController.hasClients) {
@@ -108,8 +82,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     });
   }
 
-
-
   // Cleanup
   @override
   void dispose() {
@@ -118,27 +90,26 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     super.dispose();
   }
 
-
-
   // OAuth Authentication Handler
   Future<void> handleLogin(OAuthProvider provider) async {
     setState(() => loading = true);
     try {
-      await Supabase.instance.client.auth.signInWithOAuth(
+      final result = await Supabase.instance.client.auth.signInWithOAuth(
         provider,
-        redirectTo: kIsWeb 
+        redirectTo: kIsWeb
             ? '${Uri.base.origin}/auth/callback'
-            : 'clario_application://callback',
-        queryParams: {
-          'access_type': 'offline',
-          'prompt': 'select_account',
-        },
+            : 'io.supabase.flutter://login-callback',
       );
-      
+
+      if (!result) {
+        throw Exception('OAuth sign in was cancelled or failed');
+      }
+
       // Session will be handled via auth state listener
     } catch (e) {
+      debugPrint('❌ OAuth Error: $e');
       if (mounted) {
-        setState(() => error = e.toString());
+        setState(() => error = 'Sign in failed. Please try again.');
       }
     } finally {
       if (mounted) {
@@ -146,9 +117,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       }
     }
   }
-
-
-
 
   // Email/Password Authentication Handler
   Future<void> handleAuth() async {
@@ -158,40 +126,34 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     });
     try {
       if (isSignup) {
-        print('🔐 Starting signup...');
+        debugPrint('🔐 Starting signup...');
         final response = await Supabase.instance.client.auth.signUp(
           email: emailController.text,
           password: passwordController.text,
         );
-        print('✅ Signup response: user=${response.user?.id}, session=${response.session != null}');
+        debugPrint(
+          '✅ Signup response: user=${response.user?.id}, session=${response.session != null}',
+        );
         if (response.user != null && response.session == null) {
-          setState(() =>
-          error = 'Please check your email for verification link');
+          setState(
+            () => error = 'Please check your email for verification link',
+          );
         } else if (response.session != null) {
-          print('🚀 Signup successful, navigating...');
-          // Wait a moment for auth state to propagate, then navigate
-          await Future.delayed(Duration(milliseconds: 500));
-          if (mounted) {
-            Navigator.pushReplacementNamed(context, '/home');
-          }
+          debugPrint('🚀 Signup successful - AuthGate will handle routing');
         }
       } else {
-        print('🔐 Starting login...');
+        debugPrint('🔐 Starting login...');
         final response = await Supabase.instance.client.auth.signInWithPassword(
           email: emailController.text,
           password: passwordController.text,
         );
-        print('✅ Login response: session=${response.session != null}');
+        debugPrint('✅ Login response: session=${response.session != null}');
         if (response.session != null) {
-          print('🚀 Login successful, navigating...');
-          await Future.delayed(Duration(milliseconds: 500));
-          if (mounted) {
-            Navigator.pushReplacementNamed(context, '/home');
-          }
+          debugPrint('🚀 Login successful - AuthGate will handle routing');
         }
       }
     } catch (e) {
-      print('❌ Auth error: $e');
+      debugPrint('❌ Auth error: $e');
       if (mounted) {
         setState(() => error = e.toString());
       }
@@ -202,15 +164,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     }
   }
 
-
-
-
   // Main UI Build Method
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery
-        .of(context)
-        .size;
+    final screenSize = MediaQuery.of(context).size;
     final screenHeight = screenSize.height;
     final screenWidth = screenSize.width;
     final isSmallScreen = screenWidth < 600;
@@ -218,18 +175,17 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     final double gradientTop = isSmallScreen
         ? screenHeight * 0.05
         : screenHeight * 0.08;
-    final double logoTop = isSmallScreen ? screenHeight * 0.1 : screenHeight *
-        0.13;
-    final double quoteTop = isSmallScreen ? screenHeight * 0.22 : screenHeight *
-        0.26;
+    final double logoTop = isSmallScreen
+        ? screenHeight * 0.1
+        : screenHeight * 0.13;
+    final double quoteTop = isSmallScreen
+        ? screenHeight * 0.22
+        : screenHeight * 0.26;
 
     return Scaffold(
       body: SingleChildScrollView(
         child: Column(
           children: [
-
-
-
             // Hero Section with Gradient Background
             Container(
               height: screenHeight * 0.50,
@@ -247,21 +203,14 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               ),
               child: Stack(
                 children: [
-
-
-
                   // Animated Gradient Text Component
                   Positioned(
                     top: gradientTop,
                     left: 0,
                     right: 0,
-                    child: const Center(
-                      child: AnimatedGradientTextDemo(),
-                    ),
+                    child: const Center(child: AnimatedGradientTextDemo()),
                   ),
-                  
-                  
-                  
+
                   // Main Logo Display
                   Positioned(
                     top: logoTop,
@@ -277,10 +226,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                       ),
                     ),
                   ),
-                  
-                  
-                  
-                  
+
                   // Inspirational Quote
                   Positioned(
                     top: quoteTop,
@@ -300,10 +246,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                       ),
                     ),
                   ),
-                  
-                  
-                  
-                  
+
                   // Scrolling Testimonials
                   Positioned(
                     bottom: 8,
@@ -315,17 +258,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               ),
             ),
 
-
-
-
-
             // Login Form Section
             Padding(
               padding: EdgeInsets.all(isSmallScreen ? 12.0 : 24.0),
               child: Column(
                 children: [
-                  
-                  
                   // App Logo and Title
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -337,63 +274,58 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         fit: BoxFit.contain,
                       ),
                       const SizedBox(width: 12),
-                      Text('Clario', style: GoogleFonts.raleway(
+                      Text(
+                        'Clario',
+                        style: GoogleFonts.raleway(
                           fontSize: isSmallScreen ? 24 : 32,
-                          fontWeight: FontWeight.bold)),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ],
                   ),
                   SizedBox(height: isSmallScreen ? 20 : 32),
 
-
-
-
-
                   // OAuth Authentication Buttons
                   _buildOAuthButton(
-                    onPressed: loading ? null : () =>
-                        handleLogin(OAuthProvider.google),
+                    onPressed: loading
+                        ? null
+                        : () => handleLogin(OAuthProvider.google),
                     iconPath: 'assets/search.png',
                     label: 'continue with Google',
                     isSmallScreen: isSmallScreen,
                   ),
                   SizedBox(height: isSmallScreen ? 12 : 16),
                   _buildOAuthButton(
-                    onPressed: loading ? null : () =>
-                        handleLogin(OAuthProvider.discord),
+                    onPressed: loading
+                        ? null
+                        : () => handleLogin(OAuthProvider.discord),
                     iconPath: 'assets/discord.png',
                     label: 'continue with Discord',
                     isSmallScreen: isSmallScreen,
                   ),
                   SizedBox(height: isSmallScreen ? 12 : 16),
                   _buildOAuthButton(
-                    onPressed: loading ? null : () =>
-                        handleLogin(OAuthProvider.slack),
+                    onPressed: loading
+                        ? null
+                        : () => handleLogin(OAuthProvider.slack),
                     iconPath: 'assets/slack.png',
                     label: 'continue with Slack',
                     isSmallScreen: isSmallScreen,
                   ),
                   SizedBox(height: isSmallScreen ? 12 : 32),
 
-
-
-
-
                   // Divider Text
                   Text(
-                    'or continue with ${isSignup
-                        ? "Creating Account"
-                        : "Logging In"}',
+                    'or continue with ${isSignup ? "Creating Account" : "Logging In"}',
                     style: const TextStyle(color: Colors.grey),
                   ),
                   SizedBox(height: isSmallScreen ? 12 : 24),
 
-
-
-
                   // Email Input Field
                   SizedBox(
-                    width: isSmallScreen ? screenWidth * 0.85 : screenWidth *
-                        0.6,
+                    width: isSmallScreen
+                        ? screenWidth * 0.85
+                        : screenWidth * 0.6,
                     child: TextField(
                       controller: emailController,
                       decoration: const InputDecoration(
@@ -405,14 +337,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     ),
                   ),
                   SizedBox(height: isSmallScreen ? 12 : 16),
-                  
-                  
-                  
-                  
+
                   // Password Input Field
                   SizedBox(
-                    width: isSmallScreen ? screenWidth * 0.85 : screenWidth *
-                        0.6,
+                    width: isSmallScreen
+                        ? screenWidth * 0.85
+                        : screenWidth * 0.6,
                     child: TextField(
                       controller: passwordController,
                       obscureText: true,
@@ -426,32 +356,27 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                   ),
                   SizedBox(height: isSmallScreen ? 24 : 32),
 
-
-
-
-
                   // Main Authentication Button
                   ElevatedButton(
                     onPressed: loading ? null : handleAuth,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.black,
                       minimumSize: Size(
-                          double.infinity, isSmallScreen ? 45 : 50),
+                        double.infinity,
+                        isSmallScreen ? 45 : 50,
+                      ),
                     ),
                     child: loading
                         ? const CircularProgressIndicator(color: Colors.white)
                         : Text(
-                      isSignup ? 'Sign Up →' : 'Sign In →',
-                      style: TextStyle(color: Colors.white,
-                          fontSize: isSmallScreen ? 16 : 18),
-                    ),
+                            isSignup ? 'Sign Up →' : 'Sign In →',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: isSmallScreen ? 16 : 18,
+                            ),
+                          ),
                   ),
                   SizedBox(height: isSmallScreen ? 9 : 24),
-
-
-
-
-
 
                   // Toggle Between Sign In/Sign Up
                   TextButton(
@@ -463,11 +388,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                       style: const TextStyle(color: Colors.blue),
                     ),
                   ),
-
-
-
-
-
 
                   // Error Message Display
                   if (error.isNotEmpty)
@@ -488,10 +408,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
-
-
-
-
   // OAuth Button Builder
   Widget _buildOAuthButton({
     required VoidCallback? onPressed,
@@ -502,7 +418,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     return ElevatedButton.icon(
       onPressed: onPressed,
       icon: Image.asset(
-          iconPath, width: isSmallScreen ? 20 : 24, fit: BoxFit.contain),
+        iconPath,
+        width: isSmallScreen ? 20 : 24,
+        fit: BoxFit.contain,
+      ),
       label: Text(label),
       style: ElevatedButton.styleFrom(
         backgroundColor: Colors.blue[50],

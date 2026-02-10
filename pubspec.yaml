@@ -38,9 +38,14 @@ dependencies:
   fluttertoast: ^8.2.6
   marquee: ^2.0.0
   supabase_flutter: ^2.5.8
+  app_links: ^6.4.0
+  shared_preferences: ^2.5.3
   url_launcher: ^6.2.6
   google_fonts: ^6.2.1
   google_generative_ai: ^0.4.6
+  http: ^1.2.0
+  video_player: ^2.8.2
+  chewie: ^1.7.5
 
 dev_dependencies:
   flutter_test:

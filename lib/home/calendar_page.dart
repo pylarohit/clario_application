@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 class CalendarPage extends StatefulWidget {
+  const CalendarPage({super.key});
+
   @override
-  _CalendarPageState createState() => _CalendarPageState();
+  State<CalendarPage> createState() => _CalendarPageState();
 }
 
 class _CalendarPageState extends State<CalendarPage> {
@@ -88,7 +90,7 @@ class _CalendarPageState extends State<CalendarPage> {
                 ),
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: IconButton(
@@ -118,7 +120,7 @@ class _CalendarPageState extends State<CalendarPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: Offset(0, 4),
           ),
@@ -228,7 +230,7 @@ class _CalendarPageState extends State<CalendarPage> {
                 color: isSelected
                     ? Color(0xFF5E9EF5)
                     : isToday
-                        ? Color(0xFF5E9EF5).withOpacity(0.1)
+                        ? Color(0xFF5E9EF5).withValues(alpha: 0.1)
                         : Colors.transparent,
                 borderRadius: BorderRadius.circular(8),
                 border: isToday && !isSelected
@@ -259,7 +261,7 @@ class _CalendarPageState extends State<CalendarPage> {
     List<Widget> weeks = [];
     for (int i = 0; i < dayWidgets.length; i += 7) {
       weeks.add(
-        Container(
+        SizedBox(
           height: 40,
           child: Row(
             children: dayWidgets.sublist(
@@ -301,7 +303,7 @@ class _CalendarPageState extends State<CalendarPage> {
             ],
           ),
           SizedBox(height: 16),
-          ..._events.map((event) => _buildEventCard(event)).toList(),
+          ..._events.map((event) => _buildEventCard(event)),
         ],
       ),
     );
@@ -316,7 +318,7 @@ class _CalendarPageState extends State<CalendarPage> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: Offset(0, 4),
           ),

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 class ChatPage extends StatefulWidget {
+  const ChatPage({super.key});
+
   @override
-  _ChatPageState createState() => _ChatPageState();
+  State<ChatPage> createState() => _ChatPageState();
 }
 
 class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin {
@@ -115,7 +117,7 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
             ),
             Container(
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: IconButton(
@@ -243,7 +245,7 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: Offset(0, 2),
           ),
@@ -399,7 +401,7 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
             SizedBox(height: 20),
             ListTile(
               leading: CircleAvatar(
-                backgroundColor: Color(0xFF5E9EF5).withOpacity(0.1),
+                backgroundColor: Color(0xFF5E9EF5).withValues(alpha: 0.1),
                 child: Icon(Icons.search, color: Color(0xFF5E9EF5)),
               ),
               title: Text('Find a Mentor'),
@@ -424,7 +426,8 @@ class ChatDetailPage extends StatefulWidget {
   final String mentorAvatar;
   final bool isOnline;
 
-  ChatDetailPage({
+  const ChatDetailPage({
+    super.key,
     required this.mentorName,
     required this.mentorPosition,
     required this.mentorAvatar,
@@ -432,14 +435,14 @@ class ChatDetailPage extends StatefulWidget {
   });
 
   @override
-  _ChatDetailPageState createState() => _ChatDetailPageState();
+  State<ChatDetailPage> createState() => _ChatDetailPageState();
 }
 
 class _ChatDetailPageState extends State<ChatDetailPage> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   
-  List<Map<String, dynamic>> _messages = [
+  final List<Map<String, dynamic>> _messages = [
     {
       'text': 'Hi! I saw your profile and I\'m interested in getting career guidance.',
       'isMe': true,
@@ -590,7 +593,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 5,
                   offset: Offset(0, 2),
                 ),
@@ -611,7 +614,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                   message['time'],
                   style: TextStyle(
                     fontSize: 11,
-                    color: isMe ? Colors.white.withOpacity(0.8) : Colors.grey[600],
+                    color: isMe ? Colors.white.withValues(alpha: 0.8) : Colors.grey[600],
                   ),
                 ),
               ],
@@ -629,7 +632,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: Offset(0, -2),
           ),
@@ -709,7 +712,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
           children: [
             ListTile(
               leading: CircleAvatar(
-                backgroundColor: Color(0xFF5E9EF5).withOpacity(0.1),
+                backgroundColor: Color(0xFF5E9EF5).withValues(alpha: 0.1),
                 child: Icon(Icons.photo_library, color: Color(0xFF5E9EF5)),
               ),
               title: Text('Photo & Video'),
@@ -722,7 +725,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
             ),
             ListTile(
               leading: CircleAvatar(
-                backgroundColor: Color(0xFFFF6B9D).withOpacity(0.1),
+                backgroundColor: Color(0xFFFF6B9D).withValues(alpha: 0.1),
                 child: Icon(Icons.insert_drive_file, color: Color(0xFFFF6B9D)),
               ),
               title: Text('Document'),

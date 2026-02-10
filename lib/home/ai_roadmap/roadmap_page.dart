@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 class RoadmapPage extends StatefulWidget {
+  const RoadmapPage({super.key});
+
   @override
-  _RoadmapPageState createState() => _RoadmapPageState();
+  State<RoadmapPage> createState() => _RoadmapPageState();
 }
 
 class _RoadmapPageState extends State<RoadmapPage> {
@@ -62,7 +64,7 @@ class _RoadmapPageState extends State<RoadmapPage> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: Color(0xFFFF6B9D).withOpacity(0.3),
+                      color: Color(0xFFFF6B9D).withValues(alpha: 0.3),
                       blurRadius: 15,
                       offset: Offset(0, 5),
                     ),
@@ -73,7 +75,7 @@ class _RoadmapPageState extends State<RoadmapPage> {
                     Container(
                       padding: EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
@@ -100,7 +102,7 @@ class _RoadmapPageState extends State<RoadmapPage> {
                             'Create a personalized step-by-step career roadmap',
                             style: TextStyle(
                               fontSize: 13,
-                              color: Colors.white.withOpacity(0.95),
+                              color: Colors.white.withValues(alpha: 0.95),
                             ),
                           ),
                         ],

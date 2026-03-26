@@ -17,6 +17,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:ui';
 
 /// Career Board Page Widget
 class CareerBoardPage extends StatefulWidget {
@@ -49,10 +51,11 @@ class _CareerBoardPageState extends State<CareerBoardPage> {
   
   // Real-time data lists
   List<Map<String, String>> _jobsList = [];
-  List<Map<String, String>> _collegesList = [];
   List<Map<String, String>> _topCollegesList = [];
-  List<Map<String, String>> _nearbyCollegesList = [];
+  List<Map<String, String>> _locationCollegesList = [];
   List<Map<String, String>> _resourcesList = [];
+  int _topLimit = 10;
+  int _locationLimit = 10;
   bool _isLoadingJobs = false;
   bool _isLoadingColleges = false;
   bool _isLoadingResources = false;
@@ -127,15 +130,17 @@ class _CareerBoardPageState extends State<CareerBoardPage> {
         return;
       }
       
-      // Build URL with optional pagination token
+      // Build URL with optional pagination token — broaden the search
       final Uri url;
+      final broadQuery = '$selectedCareer jobs India vacancy hiring 2026';
+      
       if (kIsWeb) {
         final supabaseUrl = dotenv.env['NEXT_PUBLIC_SUPABASE_URL'] ?? '';
-        var urlStr = '$supabaseUrl/functions/v1/serpapi-proxy?engine=google_jobs&q=${Uri.encodeComponent(selectedCareer)}&location=India';
+        var urlStr = '$supabaseUrl/functions/v1/serpapi-proxy?engine=google_jobs&q=${Uri.encodeComponent(broadQuery)}&location=India';
         if (pageToken != null) urlStr += '&next_page_token=${Uri.encodeComponent(pageToken)}';
         url = Uri.parse(urlStr);
       } else {
-        var urlStr = 'https://serpapi.com/search.json?engine=google_jobs&q=${Uri.encodeComponent(selectedCareer)}&location=India&api_key=$serpApiKey';
+        var urlStr = 'https://serpapi.com/search.json?engine=google_jobs&q=${Uri.encodeComponent(broadQuery)}&location=India&api_key=$serpApiKey';
         if (pageToken != null) urlStr += '&next_page_token=${Uri.encodeComponent(pageToken)}';
         url = Uri.parse(urlStr);
       }
@@ -175,13 +180,18 @@ class _CareerBoardPageState extends State<CareerBoardPage> {
           final applyLink = applyOptions != null && applyOptions.isNotEmpty
               ? applyOptions[0]['link']?.toString() ?? ''
               : job['share_link']?.toString() ?? '';
+              
+          final extensions = job['detected_extensions'] as Map<String, dynamic>?;
+          
           return {
             'title': job['title']?.toString() ?? 'Job Title',
             'company': job['company_name']?.toString() ?? 'Company',
             'location': job['location']?.toString() ?? 'Location',
-            'platform': 'Platform: ${job['via']?.toString() ?? 'Online'}',
+            'logo': job['thumbnail']?.toString() ?? '',
+            'type': extensions?['schedule_type']?.toString() ?? 'Full-time',
+            'salary': extensions?['salary']?.toString() ?? 'Not Disclosed',
+            'posted': extensions?['posted_at']?.toString() ?? '',
             'description': job['description']?.toString() ?? 'No description available',
-            'posted': job['detected_extensions']?['posted_at']?.toString() ?? '',
             'apply_link': applyLink,
           };
         }).toList();
@@ -241,25 +251,40 @@ class _CareerBoardPageState extends State<CareerBoardPage> {
     });
 
     try {
-      var urlStr = 'https://www.googleapis.com/youtube/v3/search'
-          '?part=snippet'
-          '&q=${Uri.encodeComponent('$selectedCareer course tutorial')}'
-          '&type=video'
-          '&maxResults=10'
-          '&order=relevance'
-          '&key=$youtubeApiKey';
-      if (pageToken != null) {
-        urlStr += '&pageToken=${Uri.encodeComponent(pageToken)}';
+      final Uri url;
+      final broadQuery = '$selectedCareer career guidance growth tutorial';
+      
+      if (kIsWeb) {
+        // Use existing serpapi-proxy (already deployed) to fetch videos on web
+        final supabaseUrl = dotenv.env['NEXT_PUBLIC_SUPABASE_URL'] ?? '';
+        var urlStr = '$supabaseUrl/functions/v1/serpapi-proxy?engine=google_videos&q=${Uri.encodeComponent(broadQuery)}&location=India&num=20';
+        if (pageToken != null) urlStr += '&start=${Uri.encodeComponent(pageToken)}';
+        url = Uri.parse(urlStr);
+      } else {
+        // Native can use direct Google API with user's key
+        var urlStr = 'https://www.googleapis.com/youtube/v3/search?part=snippet&q=${Uri.encodeComponent(broadQuery)}&type=video&maxResults=20&order=relevance&key=$youtubeApiKey';
+        if (pageToken != null) urlStr += '&pageToken=${Uri.encodeComponent(pageToken)}';
+        url = Uri.parse(urlStr);
       }
 
-      final response = await http.get(Uri.parse(urlStr));
+      final response = await http.get(url);
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final items = data['items'] as List<dynamic>? ?? [];
-        final nextToken = data['nextPageToken']?.toString();
+        
+        // Handle both SERP (on Web) and YouTube Direct (Native) formats
+        final List<dynamic> results;
+        final String? nextToken;
+        
+        if (kIsWeb) {
+          results = data['video_results'] as List<dynamic>? ?? [];
+          nextToken = data['serpapi_pagination']?['next']?.toString();
+        } else {
+          results = data['items'] as List<dynamic>? ?? [];
+          nextToken = data['nextPageToken']?.toString();
+        }
 
-        if (items.isEmpty && !isLoadMore) {
+        if (results.isEmpty && !isLoadMore) {
           setState(() {
             _youtubeList = [];
             _isLoadingYoutube = false;
@@ -269,20 +294,70 @@ class _CareerBoardPageState extends State<CareerBoardPage> {
           return;
         }
 
-        final newVideos = items.map<Map<String, String>>((item) {
-          final snippet = item['snippet'] ?? {};
-          final videoId = item['id']?['videoId']?.toString() ?? '';
-          return {
-            'title': snippet['title']?.toString() ?? 'Video Title',
-            'channel': snippet['channelTitle']?.toString() ?? 'Channel',
-            'description': snippet['description']?.toString() ?? '',
-            'thumbnail': snippet['thumbnails']?['high']?['url']?.toString() ??
-                snippet['thumbnails']?['medium']?['url']?.toString() ??
-                snippet['thumbnails']?['default']?['url']?.toString() ?? '',
-            'videoId': videoId,
-            'url': 'https://www.youtube.com/watch?v=$videoId',
-            'publishedAt': snippet['publishedAt']?.toString() ?? '',
-          };
+        final newVideos = results.map<Map<String, String>>((item) {
+          if (kIsWeb) {
+            // Mapping from SERP google_videos
+            final title = item['title']?.toString() ?? 'Video Title';
+            String link = item['link']?.toString() ?? '';
+            
+            // Unwrap google.com/url if present (common in search results)
+            if (link.contains('google.com/url')) {
+              final uri = Uri.tryParse(link);
+              if (uri != null && uri.queryParameters.containsKey('url')) {
+                link = uri.queryParameters['url']!;
+              }
+            }
+            
+            // Extract videoId more robustly from various YouTube formats
+            String videoId = '';
+            final idMatch = RegExp(r'(?:v=|\/|embed\/|youtu.be\/)([0-9A-Za-z_-]{11})').firstMatch(link);
+            if (idMatch != null) {
+              videoId = idMatch.group(1)!;
+            } else if (link.contains('v=')) {
+              videoId = link.split('v=').last.split('&').first;
+            }
+            if (videoId.length > 11) videoId = videoId.substring(0, 11);
+            
+            // Try different thumbnail locations in SERP response
+            String thumb = item['thumbnail']?.toString() ?? 
+                          item['rich_snippet']?['top']?['thumbnail']?.toString() ??
+                          item['rich_snippet']?['video']?['thumbnail']?.toString() ?? '';
+            
+            // Final fallback to YouTube's own high-quality imagery
+            if (thumb.isEmpty && videoId.isNotEmpty) {
+              thumb = 'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
+            }
+            
+            return {
+              'title': title,
+              'channel': item['channel'] ?? item['source'] ?? 'YouTube',
+              'description': item['description'] ?? '',
+              'thumbnail': thumb,
+              'videoId': videoId,
+              'url': link.isNotEmpty ? link : 'https://www.youtube.com/watch?v=$videoId',
+              'publishedAt': item['posted_at']?.toString() ?? '',
+            };
+          } else {
+            // Mapping from YouTube Data API (Native)
+            final snippet = item['snippet'] ?? {};
+            final videoId = item['id']?['videoId']?.toString() ?? '';
+            String thumb = snippet['thumbnails']?['maxres']?['url']?.toString() ??
+                   snippet['thumbnails']?['high']?['url']?.toString() ?? 
+                   snippet['thumbnails']?['medium']?['url']?.toString() ?? '';
+                   
+            if (thumb.isEmpty && videoId.isNotEmpty) {
+              thumb = 'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
+            }
+            return {
+              'title': snippet['title']?.toString() ?? 'Video Title',
+              'channel': snippet['channelTitle']?.toString() ?? 'YouTube',
+              'description': snippet['description']?.toString() ?? '',
+              'thumbnail': thumb,
+              'videoId': videoId,
+              'url': 'https://www.youtube.com/watch?v=$videoId',
+              'publishedAt': snippet['publishedAt']?.toString() ?? '',
+            };
+          }
         }).toList();
 
         setState(() {
@@ -327,90 +402,44 @@ class _CareerBoardPageState extends State<CareerBoardPage> {
     debugPrint('🔍 _fetchRealCollegesData — career=$selectedCareer, searchLocation=$searchLocation');
     if (selectedCareer.isEmpty) return;
 
+    final searchInput = searchLocation ?? _collegeSearchLocation;
+    
     setState(() {
       _isLoadingColleges = true;
       _collegesLoadFailed = false;
+      if (searchInput.isNotEmpty) {
+        _locationLimit = 10; // Reset search pagination on new search
+      }
     });
 
-    // Determine which location to use for nearby colleges
-    final nearbyLocation = searchLocation ?? _collegeSearchLocation;
-    final nearbyCity = nearbyLocation.isNotEmpty ? nearbyLocation : _userCity;
-    final nearbyState = nearbyLocation.isNotEmpty ? '' : _userState;
-
     try {
-      // ── Step 1: Load top colleges for career from table ──
-      var topResults = await _loadTopCollegesFromTable(selectedCareer);
-
-      if (topResults.length < 10) {
-        // Not enough top colleges — fetch from SERP
-        debugPrint('🔄 Not enough top colleges in DB (${topResults.length}), fetching from SERP...');
-        final freshTop = await _fetchTopCollegesFromSERP(selectedCareer);
-        if (freshTop.isNotEmpty) {
-          // Use SERP data directly for display
-          topResults = freshTop;
-          // Save to DB and wait for completion
-          debugPrint('💾 Saving ${freshTop.length} top colleges to database...');
-          await _saveCollegesToTable(freshTop, selectedCareer, isTop: true, userLocation: 'India');
-          debugPrint('✅ Top colleges saved to database');
+      // ── Section 1: All India Top Ranking (Always Load) ──
+      var topInstitutes = await _loadTopCollegesFromTable(selectedCareer);
+      if (topInstitutes.length < 50) {
+        topInstitutes = await _fetchTopCollegesFromSERP(selectedCareer);
+        if (topInstitutes.isNotEmpty) {
+          await _saveCollegesToTable(topInstitutes, selectedCareer, isTop: true, userLocation: 'India');
         }
       }
 
-      // ── Step 2: Load nearby colleges for career + location ──
-      final locationQuery = nearbyCity.isNotEmpty && nearbyState.isNotEmpty
-          ? '$nearbyCity, $nearbyState'
-          : nearbyCity.isNotEmpty ? nearbyCity : nearbyState.isNotEmpty ? nearbyState : 'India';
-
-      var nearbyResults = await _loadNearbyCollegesFromTable(
-        selectedCareer, nearbyCity, nearbyState,
-      );
-
-      if (nearbyResults.isEmpty) {
-        // No nearby colleges in DB — fetch from SERP
-        debugPrint('🔄 No nearby colleges in DB for $locationQuery, fetching from SERP...');
-        final freshNearby = await _fetchNearbyCollegesFromSERP(selectedCareer, locationQuery);
-        if (freshNearby.isNotEmpty) {
-          // Use SERP data directly for display
-          nearbyResults = freshNearby;
-          // Save to DB and wait for completion
-          debugPrint('💾 Saving ${freshNearby.length} nearby colleges to database...');
-          await _saveCollegesToTable(freshNearby, selectedCareer, isTop: false, userLocation: locationQuery);
-          debugPrint('✅ Nearby colleges saved to database');
+      // ── Section 2: Location-Specific Results (Only if searched) ──
+      var locationInstitutes = <Map<String, String>>[];
+      if (searchInput.isNotEmpty) {
+        locationInstitutes = await _loadNearbyCollegesFromTable(selectedCareer, searchInput, '');
+        if (locationInstitutes.isEmpty) {
+          locationInstitutes = await _fetchNearbyCollegesFromSERP(selectedCareer, searchInput);
+          if (locationInstitutes.isNotEmpty) {
+            await _saveCollegesToTable(locationInstitutes, selectedCareer, isTop: false, userLocation: searchInput);
+          }
         }
       }
 
-      // Deduplicate across top and nearby colleges
-      final allColleges = <Map<String, String>>[...topResults, ...nearbyResults];
-      final seenNames = <String>{};
-      final deduped = <Map<String, String>>[];
-      
-      for (var college in allColleges) {
-        final name = (college['name'] ?? '').trim();
-        if (name.isEmpty || !_isValidCollegeName(name)) continue;
-        
-        // Normalize name for comparison (lowercase, remove multiple spaces, remove punctuation)
-        final normalizedName = name.toLowerCase()
-            .replaceAll(RegExp(r'[,.]'), '')
-            .replaceAll(RegExp(r'\s+'), ' ')
-            .trim();
-        
-        if (!seenNames.contains(normalizedName)) {
-          seenNames.add(normalizedName);
-          deduped.add(college);
-        }
-      }
-      
-      debugPrint('📊 Total unique colleges after deduplication: ${deduped.length} (from ${allColleges.length})');
-      
-      // Split back into top and nearby based on original source
-      final topDeduped = deduped.take(10).toList();
-      final nearbyDeduped = deduped.skip(10).toList();
-      
+      // Final State Update
       setState(() {
-        _topCollegesList = topDeduped;
-        _nearbyCollegesList = nearbyDeduped;
-        _collegesList = deduped;
+        _topCollegesList = _deduplicate(topInstitutes);
+        _locationCollegesList = _deduplicate(locationInstitutes);
         _isLoadingColleges = false;
-        _collegesLoadFailed = deduped.isEmpty;
+        _collegesLoadFailed = (_topCollegesList.isEmpty && _locationCollegesList.isEmpty);
       });
     } catch (e) {
       debugPrint('❌ _fetchRealCollegesData error: $e');
@@ -419,6 +448,19 @@ class _CareerBoardPageState extends State<CareerBoardPage> {
         _collegesLoadFailed = true;
       });
     }
+  }
+
+  /// Clean helper to deduplicate local results
+  List<Map<String, String>> _deduplicate(List<Map<String, String>> list) {
+    final seen = <String>{};
+    return list.where((college) {
+      final name = (college['name'] ?? '').trim();
+      if (name.isEmpty || !_isValidCollegeName(name)) return false;
+      final key = name.toLowerCase().replaceAll(RegExp(r'[,.]'), '').replaceAll(RegExp(r'\s+'), ' ').trim();
+      if (seen.contains(key)) return false;
+      seen.add(key);
+      return true;
+    }).toList();
   }
 
   /// Query `colleges` table for top colleges matching this career (India-wide)
@@ -434,7 +476,8 @@ class _CareerBoardPageState extends State<CareerBoardPage> {
           .eq('user_id', userId)
           .eq('career', career)
           .eq('is_top', true)
-          .order('sort_order', ascending: true);
+          .order('sort_order', ascending: true)
+          .limit(100);
 
       final data = List<Map<String, dynamic>>.from(response);
       debugPrint('📦 Top colleges from DB for "$career": ${data.length}');
@@ -525,7 +568,10 @@ class _CareerBoardPageState extends State<CareerBoardPage> {
     ).hasMatch(name);
     if (!hasKeyword) return false;
     
-    // Final check: must not be a generic phrase
+    // Final check: must not be a generic phrase or category listing
+    final genericPhrases = ['engineering college', 'medical college', 'arts college', 'private engineering college', 'best colleges', 'top colleges', 'colleges in india'];
+    if (genericPhrases.any((p) => lower == p || (lower.contains(p) && name.split(' ').length <= 3))) return false;
+    
     if (lower == 'college' || lower == 'university' || lower == 'institute' || lower == 'institution') return false;
     
     return true;
@@ -626,80 +672,77 @@ class _CareerBoardPageState extends State<CareerBoardPage> {
         return [];
       }
 
-      final query = 'top 10 best colleges in India for $career fees placement ranking';
+      final topColleges = <Map<String, String>>[];
+      
+      // Perform TWO queries to get breadth
+      final queries = [
+        'best premier 100 colleges in India for $career fees placement NIRF ranking',
+        'top universities and private institutes in India for $career engineering medical management'
+      ];
 
-      final Uri url;
-      if (kIsWeb) {
-        final supabaseUrl = dotenv.env['NEXT_PUBLIC_SUPABASE_URL'] ?? '';
-        url = Uri.parse('$supabaseUrl/functions/v1/serpapi-proxy?engine=google&q=${Uri.encodeComponent(query)}&location=India&num=10');
-      } else {
-        url = Uri.parse('https://serpapi.com/search.json?engine=google&q=${Uri.encodeComponent(query)}&location=India&num=10&api_key=$serpApiKey');
+      for (var query in queries) {
+        final Uri url;
+        if (kIsWeb) {
+          final supabaseUrl = dotenv.env['NEXT_PUBLIC_SUPABASE_URL'] ?? '';
+          url = Uri.parse('$supabaseUrl/functions/v1/serpapi-proxy?engine=google&q=${Uri.encodeComponent(query)}&location=India&num=60');
+        } else {
+          url = Uri.parse('https://serpapi.com/search.json?engine=google&q=${Uri.encodeComponent(query)}&location=India&num=60&api_key=$serpApiKey');
+        }
+
+        debugPrint('🏆 SERP: Fetching for query: $query');
+        final response = await http.get(url);
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+
+          // Knowledge graph
+          final knowledgeGraph = data['knowledge_graph'];
+          if (knowledgeGraph != null) {
+            final kgTitle = knowledgeGraph['title']?.toString() ?? '';
+            if (kgTitle.isNotEmpty) {
+              topColleges.add({
+                'name': kgTitle,
+                'location': knowledgeGraph['address']?.toString() ?? knowledgeGraph['location']?.toString() ?? 'India',
+                'type': knowledgeGraph['type']?.toString() ?? 'Institution',
+                'fees': 'N/A',
+                'placement': 'N/A',
+                'ranking': knowledgeGraph['rating']?.toString() ?? '',
+                'link': knowledgeGraph['website']?.toString() ?? knowledgeGraph['source']?['link']?.toString() ?? '',
+              });
+            }
+          }
+
+          // Organic results
+          final organicResults = data['organic_results'] as List<dynamic>? ?? [];
+          for (var result in organicResults) {
+            final title = result['title']?.toString() ?? '';
+            final snippet = result['snippet']?.toString() ?? '';
+            final link = result['link']?.toString() ?? '';
+            final extracted = _extractCollegesFromSearchResult(title, snippet);
+            for (var c in extracted) {
+              c['link'] = link;
+              topColleges.add(c);
+            }
+          }
+        }
       }
 
-      debugPrint('🏆 SERP: Fetching top colleges for $career');
-      final response = await http.get(url);
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final topColleges = <Map<String, String>>[];
-
-        // Knowledge graph
-        final knowledgeGraph = data['knowledge_graph'];
-        if (knowledgeGraph != null) {
-          final kgTitle = knowledgeGraph['title']?.toString() ?? '';
-          if (kgTitle.isNotEmpty) {
-            topColleges.add({
-              'name': kgTitle,
-              'location': knowledgeGraph['address']?.toString() ??
-                  knowledgeGraph['location']?.toString() ?? 'India',
-              'type': knowledgeGraph['type']?.toString() ?? 'Institution',
-              'fees': 'N/A',
-              'placement': 'N/A',
-              'ranking': knowledgeGraph['rating']?.toString() ?? '',
-            });
-          }
+      // Deduplicate all results
+      final seen = <String>{};
+      final deduped = <Map<String, String>>[];
+      for (var c in topColleges) {
+        final name = (c['name'] ?? '').trim();
+        if (name.isEmpty || !_isValidCollegeName(name)) continue;
+        
+        final key = name.toLowerCase().replaceAll(RegExp(r'[,.]'), '').replaceAll(RegExp(r'\s+'), ' ').trim();
+        if (key.length > 4 && !seen.contains(key)) {
+          seen.add(key);
+          deduped.add(c);
         }
-
-        // Organic results
-        final organicResults = data['organic_results'] as List<dynamic>? ?? [];
-        for (var result in organicResults) {
-          final title = result['title']?.toString() ?? '';
-          final snippet = result['snippet']?.toString() ?? '';
-          topColleges.addAll(_extractCollegesFromSearchResult(title, snippet));
-        }
-
-        // Answer box
-        final answerBox = data['answer_box'];
-        if (answerBox != null) {
-          final answerSnippet = answerBox['snippet']?.toString() ??
-              answerBox['answer']?.toString() ?? '';
-          if (answerSnippet.isNotEmpty) {
-            topColleges.addAll(_extractCollegesFromSearchResult('', answerSnippet));
-          }
-        }
-
-        // Deduplicate with normalization
-        final seen = <String>{};
-        final deduped = <Map<String, String>>[];
-        for (var c in topColleges) {
-          final name = (c['name'] ?? '').trim();
-          if (name.isEmpty || !_isValidCollegeName(name)) continue;
-          
-          final key = name.toLowerCase()
-              .replaceAll(RegExp(r'[,.]'), '')
-              .replaceAll(RegExp(r'\s+'), ' ')
-              .trim();
-          
-          if (key.length > 4 && !seen.contains(key)) {
-            seen.add(key);
-            deduped.add(c);
-          }
-        }
-
-        debugPrint('🏆 Top colleges from SERP: ${deduped.length}');
-        return deduped.take(10).toList();
       }
-      return [];
+
+      debugPrint('🏆 Top colleges consolidated from multiple queries: ${deduped.length}');
+      return deduped.take(100).toList();
     } catch (e) {
       debugPrint('❌ Top colleges SERP fetch failed: $e');
       return [];
@@ -747,6 +790,7 @@ class _CareerBoardPageState extends State<CareerBoardPage> {
               'fees': 'N/A',
               'placement': 'N/A',
               'ranking': place['rating']?.toString() ?? '',
+              'link': place['links']?['website']?.toString() ?? place['links']?['directions']?.toString() ?? '',
             });
           }
         }
@@ -757,6 +801,7 @@ class _CareerBoardPageState extends State<CareerBoardPage> {
         for (var result in organicResults) {
           final title = result['title']?.toString() ?? '';
           final snippet = result['snippet']?.toString() ?? '';
+          final link = result['link']?.toString() ?? '';
           debugPrint('📍   Organic: $title');
 
           // Try extracting from title directly as a college name
@@ -767,9 +812,10 @@ class _CareerBoardPageState extends State<CareerBoardPage> {
               'location': _extractLocationFromText('$title $snippet', cleanTitle).isEmpty
                   ? location : _extractLocationFromText('$title $snippet', cleanTitle),
               'type': _guessCollegeType(cleanTitle),
-              'fees': _extractFeesFromText(snippet),
-              'placement': _extractPlacementFromText(snippet),
-              'ranking': _extractRankingFromText(snippet, cleanTitle),
+              'fees': _extractFeesFromText('$title $snippet'),
+              'placement': _extractPlacementFromText('$title $snippet'),
+              'ranking': _extractRankingFromText('$title $snippet', cleanTitle),
+              'link': link,
             });
           }
 
@@ -841,14 +887,15 @@ class _CareerBoardPageState extends State<CareerBoardPage> {
   /// Clean a SERP result title to extract a college name
   String _cleanCollegeName(String title) {
     var name = title
+        .replaceAll(RegExp(r'\b(are|is|and|campu|offer|eering)\b.*', caseSensitive: false), '')
         .replaceAll(RegExp(r'\s*[-|:]\s*(Wikipedia|Ranking|Courses|Fees|Admission|Shiksha|CollegeDunia|Collegedunia|Careers360|NIRF|Reviews|Overview|Placements|Cutoff|Info|Syllabus|Eligibility|Application|Careers|Jobs|Salary|Scope).*', caseSensitive: false), '')
         .replaceAll(RegExp(r'\s*\(.*?\)'), '')
         .replaceAll(RegExp(r'\s*-\s*$'), '')
         .replaceAll(RegExp(r'^\d+\.\s*'), '')
         .replaceAll(RegExp(r'\s*,\s*(Courses|Fees|Ranking|Admission|Placements|Reviews|Cutoff).*', caseSensitive: false), '')
         .replaceAll(RegExp(r'\s*;\s*\d+.*'), '') // Remove "; 1" etc.
-        .replaceAll(RegExp(r'\s+in\s+India.*', caseSensitive: false), '') // Remove "in India" trailing
-        .replaceAll(RegExp(r'\s+near\s+.*', caseSensitive: false), '') // Remove "near xyz"
+        .replaceAll(RegExp(r'\s+in\s+India.*', caseSensitive: false), '') 
+        .replaceAll(RegExp(r'\s+near\s+.*', caseSensitive: false), '') 
         .trim();
     if (name.length > 100) {
       name = name.substring(0, 100).replaceAll(RegExp(r'\s+\S*$'), '');
@@ -871,7 +918,6 @@ class _CareerBoardPageState extends State<CareerBoardPage> {
 
   /// Search colleges at a specific location entered by user
   void _searchCollegesAtLocation(String location) {
-    if (location.trim().isEmpty) return;
     setState(() {
       _collegeSearchLocation = location.trim();
     });
@@ -1083,7 +1129,7 @@ class _CareerBoardPageState extends State<CareerBoardPage> {
           } else if (link.contains('udemy')) {
             source = 'Udemy';
           } else if (link.contains('youtube')) {
-            source = 'YouTube';
+            return null; // Skip YouTube links in general resources
           } else if (link.contains('w3schools')) {
             source = 'W3Schools';
           } else if (link.contains('freecodecamp')) {
@@ -1105,8 +1151,9 @@ class _CareerBoardPageState extends State<CareerBoardPage> {
             'description': result['snippet']?.toString() ?? 'Learn more about $selectedCareer',
             'source': source,
             'url': link,
+            'thumbnail': result['thumbnail']?.toString() ?? 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&q=80&w=800',
           };
-        }).toList();
+        }).where((r) => r != null).toList().cast<Map<String, String>>();
 
         setState(() {
           if (isLoadMore) {
@@ -1806,7 +1853,7 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
                 border: Border.all(color: const Color(0xFF5E9EF5), width: 3),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF5E9EF5).withValues(alpha: 0.2),
+                    color: const Color(0xFF5E9EF5).withOpacity(0.2),
                     blurRadius: 20,
                     spreadRadius: 5,
                   ),
@@ -1878,7 +1925,7 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
                 border: Border.all(color: const Color(0xFFFBBF24), width: 3),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFFFBBF24).withValues(alpha: 0.2),
+                    color: const Color(0xFFFBBF24).withOpacity(0.2),
                     blurRadius: 20,
                     spreadRadius: 5,
                   ),
@@ -2006,12 +2053,12 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
       children: [
         Container(
           margin: const EdgeInsets.symmetric(horizontal: 12),
-          height: 213,
+          height: MediaQuery.of(context).size.height * 0.27,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF5E9EF5).withValues(alpha: 0.3),
+                color: const Color(0xFF5E9EF5).withOpacity(0.3),
                 blurRadius: 30,
                 offset: const Offset(0, 15),
               ),
@@ -2110,9 +2157,9 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
                     decoration: BoxDecoration(
                       gradient: RadialGradient(
                         colors: [
-                          gradient[0].withValues(alpha: 0.15),
-                          gradient[0].withValues(alpha: 0.05),
-                          Colors.white.withValues(alpha: 0),
+                          gradient[0].withOpacity(0.15),
+                          gradient[0].withOpacity(0.05),
+                          Colors.white.withOpacity(0),
                         ],
                         radius: 0.8,
                       ),
@@ -2124,7 +2171,7 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
                 ),
                 // Content
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -2132,7 +2179,7 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
                       Text(
                         title,
                         style: const TextStyle(
-                          fontSize: 18,
+                          fontSize: 15,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF1B1B1B),
                           height: 1.3,
@@ -2152,7 +2199,7 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 8),
                       ElevatedButton(
                         onPressed: () {},
                         style: ElevatedButton.styleFrom(
@@ -2251,7 +2298,7 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
                             child: Icon(
                               Icons.image_not_supported,
                               size: 80,
-                              color: Colors.white.withValues(alpha: 0.5),
+                              color: Colors.white.withOpacity(0.5),
                             ),
                           );
                         },
@@ -2276,7 +2323,7 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -2334,7 +2381,7 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -2420,7 +2467,7 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -2488,7 +2535,7 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
+            color: Colors.black.withOpacity(0.1),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -2524,10 +2571,10 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
                 constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width - 80),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
+                  color: Colors.white.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.2),
+                    color: Colors.white.withOpacity(0.2),
                     width: 1,
                   ),
                 ),
@@ -2549,132 +2596,132 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
     );
   }
 
-  /// Build Resources Banner with gradient design
   Widget _buildResourcesBanner() {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 380;
     final isMediumScreen = screenWidth < 600;
-    
-    // Responsive sizing - smaller decorative elements
-    final decorativeWidth = isSmallScreen ? 60.0 : (isMediumScreen ? 70.0 : 85.0);
-    final decorativeHeight = isSmallScreen ? 60.0 : (isMediumScreen ? 70.0 : 85.0);
-    final horizontalPadding = isSmallScreen ? 75.0 : (isMediumScreen ? 85.0 : 105.0);
     
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 0),
-      height: isSmallScreen ? 180 : (isMediumScreen ? 200 : 220),
+      height: isMediumScreen ? 200 : 240,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF93C5FD),
-            Color(0xFFC084FC),
-            Color(0xFFF0ABFC),
-          ],
-        ),
+        borderRadius: BorderRadius.circular(32),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF93C5FD).withValues(alpha: 0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+            color: const Color(0xFF6366F1).withOpacity(0.35),
+            blurRadius: 30,
+            offset: const Offset(0, 15),
           ),
         ],
       ),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // Decorative icon - left (smaller, at edge)
-          Positioned(
-            top: 0,
-            bottom: 0,
-            left: 5,
-            child: Container(
-              width: decorativeWidth,
-              alignment: Alignment.centerLeft,
-              child: Image.asset(
-                'assets/ca1.png',
-                width: decorativeWidth,
-                height: decorativeHeight,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) {
-                  return const SizedBox.shrink();
-                },
-              ),
-            ),
-          ),
-          // Decorative icon - right (smaller, at edge)
-          Positioned(
-            top: 0,
-            bottom: 0,
-            right: 5,
-            child: Container(
-              width: decorativeWidth,
-              alignment: Alignment.centerRight,
-              child: Image.asset(
-                'assets/ca2.png',
-                width: decorativeWidth,
-                height: decorativeHeight,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) {
-                  return const SizedBox.shrink();
-                },
-              ),
-            ),
-          ),
-          // Main content - text has priority with full visibility
-          Center(
-            child: Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: horizontalPadding,
-                vertical: 16,
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          'Right Resources found just for you.',
-                          style: TextStyle(
-                            fontSize: isSmallScreen ? 17 : (isMediumScreen ? 20 : 24),
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black,
-                            height: 1.3,
-                            letterSpacing: 0.3,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                      SizedBox(width: isSmallScreen ? 6 : 10),
-                      Icon(
-                        Icons.graphic_eq,
-                        color: Colors.black,
-                        size: isSmallScreen ? 22 : (isMediumScreen ? 24 : 28),
-                      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(32),
+        child: Stack(
+          children: [
+            // Premium Gradient Background (Works on Web & Native)
+            Positioned.fill(
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Color(0xFF4F46E5), // Indigo
+                      Color(0xFF7C3AED), // Violet
+                      Color(0xFFC026D3), // Fuchsia
+                      Color(0xFFDB2777), // Pink
                     ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    stops: [0.1, 0.4, 0.7, 0.9],
                   ),
-                  SizedBox(height: isSmallScreen ? 12 : 14),
-                  Text(
-                    'Browse Courses and Top rated Yt videos for your career.',
-                    style: TextStyle(
-                      fontSize: isSmallScreen ? 13 : (isMediumScreen ? 14 : 16),
-                      color: Colors.black87,
-                      height: 1.4,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-        ],
+            
+            // Decorative Abstract Shapes
+            Positioned(
+              top: -50,
+              right: -50,
+              child: Container(
+                width: 200,
+                height: 200,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withOpacity(0.1),
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: -30,
+              left: -30,
+              child: Container(
+                width: 140,
+                height: 140,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withOpacity(0.08),
+                ),
+              ),
+            ),
+            
+            // Glassmorphism Content Area
+            Center(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                  child: Container(
+                    width: screenWidth * 0.85,
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.3),
+                        width: 1.5,
+                      ),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Colors.white.withOpacity(0.2),
+                          Colors.white.withOpacity(0.05),
+                        ],
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'Right Resources found just for you.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            letterSpacing: -0.5,
+                            shadows: [
+                              Shadow(color: Colors.black26, offset: Offset(0, 2), blurRadius: 4),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Browse curated Courses, Videos and Job Opportunities specifically for your career path.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withOpacity(0.9),
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2688,7 +2735,7 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -2721,7 +2768,7 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
         // Fetch data when respective tab is selected
         if (label == 'Jobs' && _jobsList.isEmpty) {
           _fetchRealJobsData();
-        } else if (label == 'Colleges' && _collegesList.isEmpty) {
+        } else if (label == 'Colleges' && _topCollegesList.isEmpty && _locationCollegesList.isEmpty) {
           _fetchRealCollegesData();
         } else if (label == 'Resources' && _resourcesList.isEmpty) {
           _fetchRealResourcesData();
@@ -2755,30 +2802,29 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Header with search results
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: RichText(
-                text: TextSpan(
-                  text: 'Search results for ',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    color: Colors.black87,
-                  ),
-                  children: [
-                    TextSpan(
-                      text: selectedCareer,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        color: Color(0xFF5E9EF5),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+            RichText(
+              text: TextSpan(
+                text: 'Search results for ',
+                style: const TextStyle(
+                  fontSize: 15,
+                  color: Colors.black87,
                 ),
+                children: [
+                  TextSpan(
+                    text: selectedCareer,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      color: Color(0xFF5E9EF5),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Icon(Icons.track_changes, size: 18, color: Colors.grey[600]),
@@ -2833,37 +2879,39 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
                       ),
                     ),
                   )
-                : _jobsList.isEmpty
+                : (_jobsList.isEmpty && !_isLoadingJobs)
                     ? Center(
                         child: Padding(
                           padding: const EdgeInsets.all(40.0),
-                          child: Text(
-                            'No jobs found.',
-                            style: TextStyle(color: Colors.grey[600]),
+                          child: Column(
+                            children: [
+                              const Icon(Icons.work_outline, size: 48, color: Colors.grey),
+                              const SizedBox(height: 16),
+                              const Text('No current job listings found.', style: TextStyle(color: Colors.grey)),
+                              TextButton(onPressed: () => _fetchRealJobsData(), child: const Text('Retry Search')),
+                            ],
                           ),
                         ),
                       )
                     : Column(
                         children: [
-                          GridView.builder(
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                              childAspectRatio: 0.75,
-                            ),
+                          ListView.separated(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
                             itemCount: _jobsList.length,
+                            separatorBuilder: (context, index) => const SizedBox(height: 16),
                             itemBuilder: (context, index) {
                               final job = _jobsList[index];
                               return _buildJobCard(
-                                job['title'] ?? '',
-                                job['company'] ?? '',
-                                job['location'] ?? '',
-                                job['platform'] ?? '',
-                                job['description'] ?? '',
-                                job['apply_link'] ?? '',
+                                title: job['title'] ?? '',
+                                company: job['company'] ?? '',
+                                location: job['location'] ?? '',
+                                description: job['description'] ?? '',
+                                applyLink: job['apply_link'] ?? '',
+                                logo: job['logo'] ?? '',
+                                type: job['type'] ?? 'Full-time',
+                                salary: job['salary'] ?? 'Not Disclosed',
+                                posted: job['posted'] ?? 'Just now',
                               );
                             },
                           ),
@@ -2903,135 +2951,251 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
     );
   }
 
-  /// Build individual job card
-  Widget _buildJobCard(
-    String title,
-    String company,
-    String location,
-    String platform,
-    String description,
-    String applyLink,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey[200]!),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
-                    height: 1.3,
+  /// Build individual job card (Internshala Style)
+  Widget _buildJobCard({
+    required String title,
+    required String company,
+    required String location,
+    required String description,
+    required String applyLink,
+    required String logo,
+    required String type,
+    required String salary,
+    required String posted,
+  }) {
+    // Determine dynamic values like experience from description
+    String experience = 'No prior experience required';
+    if (description.toLowerCase().contains('exp') || description.toLowerCase().contains('year')) {
+      final reg = RegExp(r'(\d+)\+?\s?(year|yr)', caseSensitive: false);
+      final match = reg.firstMatch(description);
+      if (match != null) {
+        experience = '${match.group(0)} experience';
+      }
+    }
+    
+    // Extract skills if possible, else some fallback from title
+    List<String> skills = [];
+    if (description.contains('Skill')) {
+      // Very naive extraction, but we want real content where possible
+      final chunks = description.split(RegExp(r'Skill|Requirements|Required', caseSensitive: false));
+      if (chunks.length > 1) {
+        final lines = chunks[1].split('\n').take(2);
+        for (var l in lines) {
+           final s = l.replaceAll(RegExp(r'[-:*•]'), '').trim();
+           if (s.isNotEmpty && s.length < 20) skills.add(s);
+        }
+      }
+    }
+    if (skills.isEmpty) {
+      if (title.contains(' ')) skills = title.split(' ').take(2).toList();
+      else if (selectedCareer.isNotEmpty) skills = [selectedCareer];
+    }
+    if (skills.length > 2) skills = skills.sublist(0, 2);
+
+    return InkWell(
+      onTap: applyLink.isNotEmpty
+          ? () async {
+              final uri = Uri.tryParse(applyLink);
+              if (uri != null && await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            }
+          : null,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.grey[100]!),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Top: Title, Company and Logo
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF333333),
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        company,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              const SizedBox(width: 4),
-              Icon(Icons.favorite_border, color: Colors.blue[400], size: 18),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Icon(Icons.business, size: 14, color: Colors.blue[400]),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  company,
-                  style: TextStyle(fontSize: 12, color: Colors.blue[600]),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                const SizedBox(width: 12),
+                // Company Logo
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey[100]!),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: logo.isNotEmpty
+                        ? Image.network(
+                            logo,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) => 
+                                Center(child: Text(company[0].toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold))),
+                          )
+                        : Center(child: Text(company[0].toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold))),
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Icon(Icons.location_on, size: 14, color: Colors.grey[600]),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  location,
-                  style: TextStyle(fontSize: 11, color: Colors.grey[700]),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              ],
+            ),
+            const SizedBox(height: 16),
+            
+            // Detail Icons
+            _jobDetailRow(Icons.work_outline, experience),
+            const SizedBox(height: 8),
+            _jobDetailRow(Icons.access_time, type),
+            const SizedBox(height: 8),
+            _jobDetailRow(Icons.location_on_outlined, location),
+            const SizedBox(height: 16),
+            
+            // Badges & Salary
+            Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Skills Chips
+                  Row(
+                    children: [
+                      ...skills.map((s) => Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          s,
+                          style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                        ),
+                      )),
+                      if (description.length > 50) 
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text('+${(description.length / 100).floor() + 2}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                        ),
+                    ],
+                  ),
+                  
+                  // Salary Badge (Green)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE8F5E9).withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          salary == 'Not Disclosed' ? '₹ Not Disclosed' : salary,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF2E7D32),
+                            fontWeight: FontWeight.w600,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.money_rounded, color: Color(0xFF4CAF50), size: 14),
+                      ],
+                    ),
+                  ),
+                ],
+            ),
+            
+            const SizedBox(height: 16),
+            Divider(color: Colors.grey[100]),
+            const SizedBox(height: 12),
+            
+            // Footer: Posting Date, Days left, Heart
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      posted.isNotEmpty ? posted : 'Just now',
+                      style: TextStyle(fontSize: 13, color: Colors.blue[600]),
+                    ),
+                    const SizedBox(width: 20),
+                    Row(
+                      children: [
+                        Icon(Icons.hourglass_empty_rounded, size: 14, color: Colors.blue[600]),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Apply soon',
+                          style: TextStyle(fontSize: 12, color: Colors.blue[600]),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            platform,
-            style: const TextStyle(fontSize: 11, color: Colors.black87),
+                Icon(Icons.favorite_outline_rounded, color: Colors.grey[400], size: 24),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _jobDetailRow(IconData icon, String label) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: Colors.grey[500]),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey[700],
+              fontWeight: FontWeight.w400,
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 6),
-          Expanded(
-            child: Text(
-              description,
-              style: TextStyle(fontSize: 11, color: Colors.grey[600], height: 1.3),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 3,
-            ),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: applyLink.isNotEmpty
-                  ? () async {
-                      final uri = Uri.tryParse(applyLink);
-                      if (uri != null && await canLaunchUrl(uri)) {
-                        await launchUrl(uri, mode: LaunchMode.externalApplication);
-                      }
-                    }
-                  : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFBBDEFB),
-                foregroundColor: Colors.black87,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Text(
-                    'Apply',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-                  ),
-                  SizedBox(width: 4),
-                  Icon(Icons.open_in_new, size: 14),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -3040,550 +3204,145 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Recommendation Banner
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: const Color(0xFF546E7A),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Get College',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const Text(
-                      'Recomendation',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const Text(
-                      'Based on your',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.white70,
-                      ),
-                    ),
-                    const Text(
-                      'Location & Career',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.white70,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  _fetchRealCollegesData();
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-                child: Row(
-                  children: const [
-                    Text('Check out'),
-                    SizedBox(width: 4),
-                    Icon(Icons.arrow_forward, size: 16),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        // Location indicator
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: Colors.blue[50],
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.blue[100]!),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.location_on, size: 18, color: Colors.blue[600]),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Showing colleges near $_userLocationDisplay',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.blue[800],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              if (selectedCareer.isNotEmpty) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[100],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    selectedCareer,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.blue[800],
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        // Search colleges by location
+        // Search Section
         Row(
           children: [
             Expanded(
               child: TextField(
                 controller: _collegeLocationSearchController,
                 decoration: InputDecoration(
-                  hintText: 'Search colleges at a location...',
-                  hintStyle: TextStyle(color: Colors.grey[500], fontSize: 14),
-                  prefixIcon: Icon(Icons.search, color: Colors.grey[600], size: 20),
+                  hintText: 'Search city (e.g. Pune, Delhi)',
+                  prefixIcon: const Icon(Icons.location_on_outlined, size: 20),
                   filled: true,
-                  fillColor: Colors.grey[100],
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                  suffixIcon: _collegeSearchLocation.isNotEmpty
-                      ? IconButton(
-                          icon: Icon(Icons.clear, color: Colors.grey[600], size: 18),
-                          onPressed: () {
-                            _collegeLocationSearchController.clear();
-                            setState(() {
-                              _collegeSearchLocation = '';
-                            });
-                            _fetchRealCollegesData();
-                          },
-                        )
-                      : null,
+                  fillColor: Colors.grey[50],
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[200]!)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[100]!)),
                 ),
-                onSubmitted: (value) {
-                  _searchCollegesAtLocation(value);
-                },
-                textInputAction: TextInputAction.search,
+                onSubmitted: (v) => _searchCollegesAtLocation(v),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             GestureDetector(
-              onTap: () {
-                _searchCollegesAtLocation(_collegeLocationSearchController.text);
-              },
+              onTap: () => _searchCollegesAtLocation(_collegeLocationSearchController.text),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                decoration: BoxDecoration(
-                  color: Colors.blue[600],
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(color: const Color(0xFF1976D2), borderRadius: BorderRadius.circular(12)),
                 child: const Icon(Icons.search, color: Colors.white, size: 20),
               ),
             ),
           ],
         ),
-        if (_collegeSearchLocation.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.orange[50],
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.orange[200]!),
-            ),
-            child: Row(
+        const SizedBox(height: 24),
+
+        if (_isLoadingColleges)
+          const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()))
+        else ...[
+          // ── Case A: No Search Active -> Show All-India Top Ranking ──
+          if (_collegeSearchLocation.isEmpty && _topCollegesList.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            const Text('All India Top Institutes',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black)),
+            const SizedBox(height: 16),
+            Column(
               children: [
-                Icon(Icons.location_searching, size: 14, color: Colors.orange[700]),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'Showing nearby colleges for: $_collegeSearchLocation',
-                    style: TextStyle(fontSize: 12, color: Colors.orange[800], fontWeight: FontWeight.w500),
-                  ),
-                ),
+                ..._topCollegesList.take(_topLimit).toList().asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final college = entry.value;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 24.0),
+                    child: _buildCollegeCard(
+                      college['name'] ?? '',
+                      college['location'] ?? 'India',
+                      college['type'] ?? '',
+                      college['fees'] ?? '',
+                      college['placement'] ?? '',
+                      [], 
+                      selectedCareer,
+                      rank: '${index + 1}',
+                      url: college['link'] ?? '',
+                    ),
+                  );
+                }),
+                
+                if (_topCollegesList.length > _topLimit)
+                  _buildLoadMoreButton('All India Institutions', () {
+                    setState(() { _topLimit += 10; });
+                  }, _topCollegesList.length - _topLimit),
               ],
             ),
-          ),
-        ],
-        const SizedBox(height: 16),
-        // AI suggested degrees
-        Wrap(
-          spacing: 8,
-          children: [
-            Text('Ai suggested Degrees', style: TextStyle(color: Colors.grey[700])),
-            _buildChip('B.Com', Colors.blue[50]!),
-            _buildChip('BBA', Colors.blue[50]!),
-            _buildChip('MBA', Colors.blue[50]!),
-          ],
-        ),
-        const SizedBox(height: 16),
-        // College content
-        _isLoadingColleges
-            ? const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(40.0),
-                  child: CircularProgressIndicator(),
-                ),
-              )
-            : _collegesLoadFailed
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(40.0),
-                      child: Column(
-                        children: [
-                          Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Failed to load colleges',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey[800],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Unable to fetch college information. Please try again later.',
-                            style: TextStyle(color: Colors.grey[600]),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
+          ]
+
+          // ── Case B: Search Active -> Show ONLY Local Results ──
+          else if (_collegeSearchLocation.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Text('Colleges in $_collegeSearchLocation',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+            const SizedBox(height: 16),
+            if (_locationCollegesList.isNotEmpty)
+              Column(
+                children: [
+                  ..._locationCollegesList.take(_locationLimit).toList().asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final college = entry.value;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 24.0),
+                      child: _buildCollegeCard(
+                        college['name'] ?? '',
+                        college['location'] ?? _collegeSearchLocation,
+                        college['type'] ?? '',
+                        college['fees'] ?? '',
+                        college['placement'] ?? '',
+                        [],
+                        selectedCareer,
+                        rank: '${index + 1}',
+                        url: college['link'] ?? '',
                       ),
-                    ),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // ── Top Colleges Section ──
-                      if (_topCollegesList.isNotEmpty) ...[
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [Color(0xFFFFD700), Color(0xFFFFA500)],
-                                ),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(Icons.emoji_events, color: Colors.white, size: 18),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Top ${_topCollegesList.length} Colleges for ${selectedCareer.isNotEmpty ? selectedCareer : "You"}',
-                                    style: const TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'Best in India',
-                                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        SizedBox(
-                          height: 280,
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: _topCollegesList.length,
-                            itemBuilder: (context, index) {
-                              final college = _topCollegesList[index];
-                              return Padding(
-                                padding: EdgeInsets.only(
-                                  right: index < _topCollegesList.length - 1 ? 14 : 0,
-                                ),
-                                child: _buildTopCollegeCard(
-                                  index: index + 1,
-                                  name: college['name'] ?? '',
-                                  location: college['location'] ?? '',
-                                  type: college['type'] ?? '',
-                                  fees: college['fees'] ?? '',
-                                  placement: college['placement'] ?? '',
-                                  ranking: college['ranking'] ?? '',
-                                  courses: (college['courses'] ?? '').split(', ').where((c) => c.isNotEmpty).toList(),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-                      // ── Nearby Colleges Section ──
-                      if (_nearbyCollegesList.isNotEmpty || _topCollegesList.isEmpty) ...[
-                        Row(
-                          children: [
-                            Icon(Icons.near_me, size: 20, color: Colors.blue[600]),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Colleges Near ${_collegeSearchLocation.isNotEmpty ? _collegeSearchLocation : _userLocationDisplay}',
-                                style: const TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        _nearbyCollegesList.isEmpty
-                            ? Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(30.0),
-                                  child: Text(
-                                    'No nearby colleges found.',
-                                    style: TextStyle(color: Colors.grey[600]),
-                                  ),
-                                ),
-                              )
-                            : GridView.builder(
-                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 2,
-                                  crossAxisSpacing: 12,
-                                  mainAxisSpacing: 12,
-                                  childAspectRatio: 0.58,
-                                ),
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: _nearbyCollegesList.length,
-                                itemBuilder: (context, index) {
-                                  final college = _nearbyCollegesList[index];
-                                  return _buildCollegeCard(
-                                    college['name'] ?? '',
-                                    college['location'] ?? '',
-                                    college['type'] ?? '',
-                                    college['fees'] ?? '',
-                                    college['placement'] ?? '',
-                                    (college['courses'] ?? '').split(', ').where((c) => c.isNotEmpty).toList(),
-                                    selectedCareer,
-                                  );
-                                },
-                              ),
-                      ],
-                    ],
-                  ),
+                    );
+                  }),
+                  
+                  if (_locationCollegesList.length > _locationLimit)
+                    _buildLoadMoreButton('Search Results', () {
+                      setState(() { _locationLimit += 10; });
+                    }, _locationCollegesList.length - _locationLimit),
+                ],
+              )
+            else if (!_isLoadingColleges)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 40.0),
+                child: Center(
+                  child: Text('No colleges found at this location. Try another city.', 
+                    style: TextStyle(color: Colors.grey, fontSize: 16)),
+                ),
+              ),
+          ],
+        ],
       ],
     );
   }
 
-  /// Build premium card for top colleges (up to 10)
-  Widget _buildTopCollegeCard({
-    required int index,
-    required String name,
-    required String location,
-    required String type,
-    required String fees,
-    required String placement,
-    required String ranking,
-    required List<String> courses,
-  }) {
-    // Gradient colors based on rank (up to 10)
-    final List<List<Color>> rankGradients = [
-      [const Color(0xFFFFD700), const Color(0xFFFFA500)], // #1 Gold
-      [const Color(0xFFC0C0C0), const Color(0xFF9E9E9E)], // #2 Silver
-      [const Color(0xFFCD7F32), const Color(0xFFA0522D)], // #3 Bronze
-      [const Color(0xFF5E9EF5), const Color(0xFF3D7FD9)], // #4 Blue
-      [const Color(0xFF7C4DFF), const Color(0xFF536DFE)], // #5 Purple
-      [const Color(0xFF26A69A), const Color(0xFF00897B)], // #6 Teal
-      [const Color(0xFFEF5350), const Color(0xFFE53935)], // #7 Red
-      [const Color(0xFF66BB6A), const Color(0xFF43A047)], // #8 Green
-      [const Color(0xFFAB47BC), const Color(0xFF8E24AA)], // #9 Deep Purple
-      [const Color(0xFFFF7043), const Color(0xFFF4511E)], // #10 Deep Orange
-    ];
-    final gradient = rankGradients[(index - 1).clamp(0, 9)];
-
-    return Container(
-      width: 220,
-      padding: const EdgeInsets.all(0),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: gradient[0].withValues(alpha: 0.3),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+  /// Shared Load More Button Widget
+  Widget _buildLoadMoreButton(String type, VoidCallback onPressed, int count) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10, bottom: 40),
+      child: Center(
+        child: TextButton.icon(
+          onPressed: onPressed,
+          icon: const Icon(Icons.add_circle_outline, color: Color(0xFF1976D2)),
+          label: Text(
+            'Show More $type (+${count > 10 ? 10 : count})',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1976D2)),
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Top gradient header with rank badge
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: gradient,
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          '#$index',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-                      const Icon(Icons.star, color: Colors.white, size: 16),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    name,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      height: 1.3,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on, size: 12, color: Colors.white70),
-                      const SizedBox(width: 3),
-                      Expanded(
-                        child: Text(
-                          location,
-                          style: const TextStyle(fontSize: 11, color: Colors.white70),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            // Card body
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-                color: Colors.white,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (ranking.isNotEmpty)
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 6),
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.amber[50],
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: Colors.amber[200]!),
-                        ),
-                        child: Text(
-                          ranking,
-                          style: TextStyle(fontSize: 10, color: Colors.amber[900], fontWeight: FontWeight.w600),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    Text(
-                      'Type: $type',
-                      style: const TextStyle(fontSize: 11, color: Colors.black54),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Fees: $fees',
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.black87),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Top Package: $placement',
-                      style: TextStyle(fontSize: 11, color: Colors.green[700], fontWeight: FontWeight.w600),
-                    ),
-                    const Spacer(),
-                    Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: courses.take(2).map((c) => Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: gradient[0].withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          c,
-                          style: TextStyle(fontSize: 9, color: gradient[1], fontWeight: FontWeight.w500),
-                        ),
-                      )).toList(),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            backgroundColor: const Color(0xFFF2F7FF),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
         ),
       ),
     );
   }
 
-  /// Build college card
+  /// Build college card (Premium UI + Clickable + Ranking)
   Widget _buildCollegeCard(
     String name,
     String location,
@@ -3591,100 +3350,224 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
     String fees,
     String placement,
     List<String> courses,
-    String career,
-  ) {
+    String career, {
+    String rank = '',
+    String url = '',
+  }) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 24),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey[200]!),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            name,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Colors.black,
-              height: 1.3,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 8),
-          Row(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: InkWell(
+          onTap: () async {
+            if (url.isNotEmpty) {
+              final uri = Uri.tryParse(url);
+              if (uri != null && await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            } else {
+              // Fallback to searching Google for the college
+              final searchUri = Uri.parse('https://www.google.com/search?q=${Uri.encodeComponent(name)}');
+              if (await canLaunchUrl(searchUri)) {
+                await launchUrl(searchUri, mode: LaunchMode.externalApplication);
+              }
+            }
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.location_on, size: 13, color: Colors.grey[600]),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  location,
-                  style: TextStyle(fontSize: 11, color: Colors.grey[700]),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              // Premium Header with Rank
+              Stack(
+                children: [
+                  Container(
+                    height: 120,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF2F7FF),
+                      image: const DecorationImage(
+                        image: NetworkImage('https://images.unsplash.com/photo-1541339907198-e08759dfc3ef?auto=format&fit=crop&q=80&w=800'),
+                        fit: BoxFit.cover,
+                        opacity: 0.8,
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 16,
+                    left: 16,
+                    child: rank.isNotEmpty
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(colors: [Color(0xFF2E5B9A), Color(0xFF1976D2)]),
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)],
+                            ),
+                            child: Text(
+                              'Rank #$rank',
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                  Positioned(
+                    top: 16,
+                    right: 16,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                      child: const Icon(Icons.verified, color: Colors.blueAccent, size: 20),
+                    ),
+                  ),
+                ],
+              ),
+
+              Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1A1F36),
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(Icons.location_on, size: 16, color: Colors.grey[400]),
+                        const SizedBox(width: 6),
+                        Text(location, style: TextStyle(fontSize: 14, color: Colors.grey[500])),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Stats Section
+                    _rowStat(Icons.account_balance_wallet_outlined, '1st Year Fees', '₹ $fees'),
+                    const SizedBox(height: 16),
+                    _rowStat(Icons.trending_up, 'Highest Placement', placement),
+                    const SizedBox(height: 16),
+                    _rowStat(Icons.business_outlined, type, ''),
+                    
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Divider(height: 1),
+                    ),
+
+                    Row(
+                      children: [
+                        const Icon(Icons.school_outlined, size: 20, color: Color(0xFF2E5B9A)),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Target Path:',
+                              style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.w500),
+                            ),
+                            Text(
+                              career.isNotEmpty ? career : 'Selected Career',
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A1F36)),
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
+                        const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+        ),
+      ),
+    );
+  }
+
+  /// Helper for row statistics (e.g. Fees, Placement)
+  Widget _rowStat(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: const Color(0xFF2D3748)),
+        const SizedBox(width: 12),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 15,
+            color: Color(0xFF4A5568),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const Spacer(),
+        if (value.isNotEmpty)
           Text(
-            'Type: $type',
-            style: const TextStyle(fontSize: 11, color: Colors.black87),
+            value,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1A202C),
+            ),
           ),
-          const SizedBox(height: 10),
-          Text(
-            '1st Year Fees: $fees',
-            style: const TextStyle(fontSize: 12, color: Colors.black87, fontWeight: FontWeight.w500),
+      ],
+    );
+  }
+
+  Widget _infoStat(IconData icon, String value) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: Colors.blue[600]),
+        const SizedBox(width: 6),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 13,
+            color: Colors.grey[700],
+            fontWeight: FontWeight.w400,
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Highest Placement: $placement',
-            style: const TextStyle(fontSize: 12, color: Colors.black87),
-          ),
-          const Spacer(),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Best Suited For:',
-                style: TextStyle(fontSize: 11, color: Colors.blue[600]),
-              ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 4,
-                runSpacing: 4,
-                children: [
-                  if (career.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.blue[100],
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.blue[300]!, width: 1),
-                      ),
-                      child: Text(
-                        career,
-                        style: TextStyle(fontSize: 10, color: Colors.blue[800], fontWeight: FontWeight.w600),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ...courses.take(2).map((course) => _buildChip(course, Colors.blue[50]!)),
-                ],
-              ),
-            ],
-          ),
-        ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildJobChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+      ),
+    );
+  }
+
+  Widget _buildResourceChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.blue[50],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 12, color: Colors.blue[700], fontWeight: FontWeight.w500),
       ),
     );
   }
@@ -3694,257 +3577,159 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header
-        Text(
-          _selectedResourceTab == 'Courses'
-              ? 'Top courses found for you'
-              : 'Top videos found for you',
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Colors.black,
+        // Tab switching header
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.grey[100],
+            borderRadius: BorderRadius.circular(14),
           ),
-          textAlign: TextAlign.center,
+          child: Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(() => _selectedResourceTab = 'Courses'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _selectedResourceTab == 'Courses' ? Colors.white : Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: _selectedResourceTab == 'Courses'
+                          ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))]
+                          : null,
+                    ),
+                    child: Center(
+                      child: Text(
+                        'Courses',
+                        style: TextStyle(
+                          fontWeight: _selectedResourceTab == 'Courses' ? FontWeight.bold : FontWeight.normal,
+                          color: _selectedResourceTab == 'Courses' ? Colors.blue[700] : Colors.grey[600],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() => _selectedResourceTab = 'YouTube Videos');
+                    if (_youtubeList.isEmpty && !_isLoadingYoutube) _fetchYoutubeVideos();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _selectedResourceTab == 'YouTube Videos' ? Colors.white : Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: _selectedResourceTab == 'YouTube Videos'
+                          ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))]
+                          : null,
+                    ),
+                    child: Center(
+                      child: Text(
+                        'Videos',
+                        style: TextStyle(
+                          fontWeight: _selectedResourceTab == 'YouTube Videos' ? FontWeight.bold : FontWeight.normal,
+                          color: _selectedResourceTab == 'YouTube Videos' ? Colors.blue[700] : Colors.grey[600],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 12),
-        // Tab buttons
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  _selectedResourceTab = 'Courses';
-                });
-              },
-              child: _buildResourceTypeButton('Courses', _selectedResourceTab == 'Courses'),
-            ),
-            const SizedBox(width: 12),
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  _selectedResourceTab = 'YouTube Videos';
-                });
-                if (_youtubeList.isEmpty && !_isLoadingYoutube) {
-                  _fetchYoutubeVideos();
-                }
-              },
-              child: _buildResourceTypeButton('YouTube Videos', _selectedResourceTab == 'YouTube Videos'),
-            ),
-          ],
+        const SizedBox(height: 24),
+        
+        // Dynamic Title
+        Text(
+          _selectedResourceTab == 'Courses' ? 'Top Online Courses' : 'Career Growth Videos',
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
         ),
         const SizedBox(height: 16),
-        // Content based on selected resource tab
+
+        // Content
         if (_selectedResourceTab == 'Courses') _buildCoursesGrid(),
         if (_selectedResourceTab == 'YouTube Videos') _buildYoutubeGrid(),
       ],
     );
   }
 
-  /// Build courses grid
+  /// Build courses grid using flat Column
   Widget _buildCoursesGrid() {
-    return _isLoadingResources
-            ? const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(40.0),
-                  child: CircularProgressIndicator(),
+    if (_isLoadingResources) return const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()));
+    if (_resourcesList.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('No courses found.')));
+
+    return Column(
+      children: [
+        ..._resourcesList.map((resource) => Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: _buildCourseCard(
+            resource['title'] ?? '',
+            resource['description'] ?? '',
+            resource['source'] ?? '',
+            resource['url'] ?? '',
+            resource['thumbnail'] ?? '',
+          ),
+        )).toList(),
+        if (_hasMoreResources)
+          _isLoadingMoreResources
+              ? const CircularProgressIndicator()
+              : TextButton.icon(
+                  onPressed: () => _fetchRealResourcesData(isLoadMore: true),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Show More Courses'),
                 ),
-              )
-            : _resourcesLoadFailed
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(40.0),
-                      child: Column(
-                        children: [
-                          Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Failed to load resources',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey[800],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Unable to fetch learning resources. Please try again later.',
-                            style: TextStyle(color: Colors.grey[600]),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                : _resourcesList.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(40.0),
-                          child: Text(
-                            'No resources found.',
-                            style: TextStyle(color: Colors.grey[600]),
-                          ),
-                        ),
-                      )
-                    : Column(
-                        children: [
-                          GridView.builder(
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                              childAspectRatio: 0.62,
-                            ),
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _resourcesList.length,
-                            itemBuilder: (context, index) {
-                              final resource = _resourcesList[index];
-                              return _buildCourseCard(
-                                resource['title'] ?? '',
-                                resource['description'] ?? '',
-                                resource['source'] ?? '',
-                                resource['url'] ?? '',
-                              );
-                            },
-                          ),
-                          if (_hasMoreResources) ...[
-                            const SizedBox(height: 16),
-                            _isLoadingMoreResources
-                                ? const Center(
-                                    child: Padding(
-                                      padding: EdgeInsets.all(16.0),
-                                      child: CircularProgressIndicator(),
-                                    ),
-                                  )
-                                : Center(
-                                    child: ElevatedButton.icon(
-                                      onPressed: () {
-                                        _fetchRealResourcesData(isLoadMore: true);
-                                      },
-                                      icon: const Icon(Icons.expand_more),
-                                      label: Text('Load More Courses (${_resourcesList.length} shown)'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFF5E9EF5),
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                          ],
-                        ],
-                      );
+      ],
+    );
   }
 
-  /// Build YouTube videos grid
+  /// Build YouTube videos grid using flat Column
   Widget _buildYoutubeGrid() {
-    if (_isLoadingYoutube) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(40.0),
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
-    if (_youtubeLoadFailed) {
+    if (_isLoadingYoutube) return const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()));
+    
+    if (_youtubeLoadFailed || (_youtubeList.isEmpty && !_isLoadingYoutube)) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(40.0),
+          padding: const EdgeInsets.all(40),
           child: Column(
             children: [
-              Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
+              const Icon(Icons.video_library_outlined, size: 48, color: Colors.grey),
               const SizedBox(height: 16),
-              Text(
-                'Failed to load videos',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[800],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Unable to fetch YouTube videos. Please try again later.',
-                style: TextStyle(color: Colors.grey[600]),
-                textAlign: TextAlign.center,
-              ),
+              const Text('No videos found for this career.', style: TextStyle(color: Colors.grey)),
+              TextButton(onPressed: () => _fetchYoutubeVideos(), child: const Text('Retry Search')),
             ],
           ),
         ),
       );
     }
-    if (_youtubeList.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(40.0),
-          child: Text(
-            'No videos found.',
-            style: TextStyle(color: Colors.grey[600]),
-          ),
-        ),
-      );
-    }
+
     return Column(
       children: [
-        GridView.builder(
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 0.72,
+        ..._youtubeList.map((video) => Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: _buildYoutubeCard(
+            video['title'] ?? '',
+            video['channel'] ?? '',
+            video['thumbnail'] ?? '',
+            video['url'] ?? '',
+            video['description'] ?? '',
           ),
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: _youtubeList.length,
-          itemBuilder: (context, index) {
-            final video = _youtubeList[index];
-            return _buildYoutubeCard(
-              video['title'] ?? '',
-              video['channel'] ?? '',
-              video['thumbnail'] ?? '',
-              video['url'] ?? '',
-              video['description'] ?? '',
-            );
-          },
-        ),
-        if (_hasMoreYoutube) ...[
-          const SizedBox(height: 16),
+        )).toList(),
+        if (_hasMoreYoutube)
           _isLoadingMoreYoutube
-              ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: CircularProgressIndicator(),
-                  ),
-                )
-              : Center(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      _fetchYoutubeVideos(
-                        pageToken: _youtubeNextPageToken,
-                        isLoadMore: true,
-                      );
-                    },
-                    icon: const Icon(Icons.expand_more),
-                    label: Text('Load More Videos (${_youtubeList.length} shown)'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF5E9EF5),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
+              ? const CircularProgressIndicator()
+              : TextButton.icon(
+                  onPressed: () => _fetchYoutubeVideos(pageToken: _youtubeNextPageToken, isLoadMore: true),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Show More Videos'),
                 ),
-        ],
       ],
     );
   }
 
-  /// Build YouTube video card
+  /// Build YouTube video card (Premium Style)
   Widget _buildYoutubeCard(
     String title,
     String channel,
@@ -3952,130 +3737,107 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
     String url,
     String description,
   ) {
-    return GestureDetector(
-      onTap: () async {
-        if (url.isNotEmpty) {
-          final uri = Uri.tryParse(url);
-          if (uri != null && await canLaunchUrl(uri)) {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
-          }
-        }
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey[200]!),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Thumbnail
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(16),
-              ),
-              child: thumbnail.isNotEmpty
-                  ? Image.network(
-                      thumbnail,
-                      height: 100,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        height: 100,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: InkWell(
+          onTap: () async {
+            if (url.isNotEmpty) {
+              final uri = Uri.tryParse(url);
+              if (uri != null && await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            }
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Course Thumbnail (Full Width)
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: thumbnail.isNotEmpty 
+                    ? Image.network(
+                        thumbnail,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: Colors.grey[200],
+                          child: const Center(child: Icon(Icons.video_library_outlined, size: 60, color: Colors.grey)),
+                        ),
+                      )
+                    : Container(
                         color: Colors.grey[200],
-                        child: Icon(Icons.play_circle_fill, size: 40, color: Colors.red[400]),
+                        child: const Center(child: Icon(Icons.video_library_outlined, size: 60, color: Colors.grey)),
                       ),
-                    )
-                  : Container(
-                      height: 100,
-                      color: Colors.grey[200],
-                      child: Icon(Icons.play_circle_fill, size: 40, color: Colors.red[400]),
-                    ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(10),
+              ),
+              
+              Padding(
+                padding: const EdgeInsets.all(20.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Course Title
                     Text(
                       title,
                       style: const TextStyle(
-                        fontSize: 13,
+                        fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Colors.black,
+                        color: Color(0xFF1A1F36),
                         height: 1.3,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
+                    
+                    // Course Description
+                    Text(
+                      description.isNotEmpty ? description : 'Learn the fundamentals of $title with this comprehensive guide.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                        height: 1.5,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Divider(height: 1),
+                    ),
+                    
+                    // Footer Link
                     Row(
                       children: [
-                        Icon(Icons.play_circle_outline, size: 14, color: Colors.red[400]),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            channel,
-                            style: TextStyle(fontSize: 11, color: Colors.grey[700]),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                        Text(
+                          'Watch Video',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[700],
                           ),
                         ),
+                        const Spacer(),
+                        Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey[400]),
                       ],
-                    ),
-                    const Spacer(),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          if (url.isNotEmpty) {
-                            final uri = Uri.tryParse(url);
-                            if (uri != null && await canLaunchUrl(uri)) {
-                              await launchUrl(uri, mode: LaunchMode.externalApplication);
-                            }
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red[50],
-                          foregroundColor: Colors.red[700],
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.play_arrow, size: 16, color: Colors.red[700]),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Watch',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
-                                color: Colors.red[700],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ),
                   ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -4117,109 +3879,108 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
     String description,
     String source,
     String url,
+    String thumbnail,
   ) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 24),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey[200]!),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Colors.black,
-              height: 1.3,
-            ),
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 10),
-          Text(
-            description,
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.grey[700],
-              height: 1.3,
-            ),
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const Spacer(),
-          Row(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: InkWell(
+          onTap: () async {
+            if (url.isNotEmpty) {
+              final uri = Uri.tryParse(url);
+              if (uri != null && await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            }
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Icon(Icons.public, size: 16, color: Colors.blue[600]),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  source,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.blue[600],
-                    fontWeight: FontWeight.w500,
+              // Course Thumbnail (Full Width)
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    image: thumbnail.isNotEmpty 
+                        ? DecorationImage(image: NetworkImage(thumbnail), fit: BoxFit.cover)
+                        : null,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  child: thumbnail.isEmpty 
+                      ? const Center(child: Icon(Icons.school_outlined, size: 60, color: Colors.grey))
+                      : null,
+                ),
+              ),
+              
+              Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Course Title
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1A1F36),
+                        height: 1.3,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                    
+                    // Course Description
+                    Text(
+                      description.isNotEmpty ? description : 'Learn the fundamentals of $title with this comprehensive guide from $source.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                        height: 1.5,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Divider(height: 1),
+                    ),
+                    
+                    // Footer Link
+                    Row(
+                      children: [
+                        Text(
+                          'View Course',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        const Spacer(),
+                        Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey[400]),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: url.isNotEmpty
-                  ? () async {
-                      final uri = Uri.tryParse(url);
-                      if (uri != null && await canLaunchUrl(uri)) {
-                        await launchUrl(uri, mode: LaunchMode.externalApplication);
-                      }
-                    }
-                  : null,
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                side: BorderSide(color: Colors.grey[300]!),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Text(
-                    'Open',
-                    style: TextStyle(
-                      color: Colors.black87,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
-                  ),
-                  SizedBox(width: 4),
-                  Icon(Icons.open_in_new, size: 14, color: Colors.black87),
-                ],
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

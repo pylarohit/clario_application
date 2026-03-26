@@ -774,7 +774,7 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
       sliver: SliverGrid(
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: crossAxisCount,
-          childAspectRatio: isMobile ? 0.72 : 0.75,
+          childAspectRatio: isMobile ? 0.62 : 0.68,
           crossAxisSpacing: isMobile ? 12 : 16,
           mainAxisSpacing: isMobile ? 12 : 16,
         ),

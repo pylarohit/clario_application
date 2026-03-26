@@ -1,7 +1,7 @@
 // ============================================================================
 // HOME PAGE - Main Landing Screen
 // ============================================================================
-// This is the main home page of the Clario application that contains:
+// This is the main home page of the Reskill application that contains:
 // - Top navigation sidebar with AI tools
 // - Bottom navigation bar (Home, Calendar, Chat, Profile)
 // - Hero banner carousel
@@ -74,6 +74,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _isQuizDone = false;
   String _userStream = '';
   List<String> _userDegrees = [];
+  String? _userPhotoUrl; // Google profile photo URL
 
   // Controllers
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -450,6 +451,14 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           _userId = user.id;
         });
 
+        // Get Google profile photo if available
+        final userMetadata = user.userMetadata;
+        if (userMetadata != null && userMetadata['avatar_url'] != null) {
+          setState(() {
+            _userPhotoUrl = userMetadata['avatar_url'];
+          });
+        }
+
         final response = await Supabase.instance.client
             .from('users')
             .select()
@@ -642,7 +651,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     ),
                     SizedBox(width: 12),
                     Text(
-                      'Clario',
+                      'Reskill',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 26,
@@ -1261,33 +1270,64 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ),
           ),
           SizedBox(width: 12),
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF5E9EF5), Color(0xFF4A7FD6)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _bottomNavIndex = 3; // Navigate to Profile tab
+              });
+            },
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                gradient: _userPhotoUrl == null
+                    ? LinearGradient(
+                        colors: [Color(0xFF5E9EF5), Color(0xFF4A7FD6)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      )
+                    : null,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0xFF5E9EF5).withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
+                  ),
+                ],
               ),
-              borderRadius: BorderRadius.circular(10),
-              boxShadow: [
-                BoxShadow(
-                  color: Color(0xFF5E9EF5).withValues(alpha: 0.3),
-                  blurRadius: 8,
-                  offset: Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Center(
-              child: Text(
-                'R',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
+              child: _userPhotoUrl != null
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.network(
+                        _userPhotoUrl!,
+                        width: 40,
+                        height: 40,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Center(
+                            child: Text(
+                              _userInitial,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    )
+                  : Center(
+                      child: Text(
+                        _userInitial,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
             ),
           ),
         ],
@@ -1305,7 +1345,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       children: [
         Container(
           margin: EdgeInsets.symmetric(horizontal: 12),
-          height: 213,
+          height: MediaQuery.of(context).size.height * 0.27,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
@@ -1452,7 +1492,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ),
                 // Content
                 Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -1460,7 +1500,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       Text(
                         title,
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: 15,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF1B1B1B),
                           height: 1.3,
@@ -1480,7 +1520,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      SizedBox(height: 14),
+                      SizedBox(height: 8),
                       ElevatedButton(
                         onPressed: () {},
                         style: ElevatedButton.styleFrom(
@@ -1528,24 +1568,30 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   bottomRight: Radius.circular(24),
                 ),
               ),
-              child: Padding(
-                padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: 0),
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Image.asset(
-                    imagePath,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    height: double.infinity,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Center(
-                        child: Icon(
-                          Icons.image_not_supported,
-                          size: 80,
-                          color: Colors.white.withValues(alpha: 0.5),
-                        ),
-                      );
-                    },
+              child: ClipRRect(
+                borderRadius: BorderRadius.only(
+                  topRight: Radius.circular(24),
+                  bottomRight: Radius.circular(24),
+                ),
+                child: Padding(
+                  padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: 0),
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Image.asset(
+                      imagePath,
+                      fit: BoxFit.contain,
+                      width: double.infinity,
+                      height: double.infinity,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Center(
+                          child: Icon(
+                            Icons.image_not_supported,
+                            size: 80,
+                            color: Colors.white.withValues(alpha: 0.5),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
@@ -1801,7 +1847,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 90,
+        constraints: BoxConstraints(minHeight: 80),
         padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: Colors.white,
@@ -1935,7 +1981,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
           SizedBox(height: 10),
           SizedBox(
-            height: 280,
+            height: 300,
             child: mentors.isEmpty
                 ? Center(
                     child: Text(

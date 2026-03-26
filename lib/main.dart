@@ -46,7 +46,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Clario',
+      title: 'Reskill',
       theme: ThemeData(primarySwatch: Colors.blue),
       home: const AuthGate(),
       //home: HomePage(), // Temporarily bypassing login - go directly to dashboard

@@ -1,6 +1,6 @@
 {
-    "name": "clario_application",
-    "short_name": "clario_application",
+    "name": "Reskill",
+    "short_name": "Reskill",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

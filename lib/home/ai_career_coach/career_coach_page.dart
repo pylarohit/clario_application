@@ -243,7 +243,7 @@ class _CareerCoachPageState extends State<CareerCoachPage> {
           _userCareer.toLowerCase() != 'choose career paths';
       
       final prompt = '''
-You are Clario, a warm and friendly AI Career Coach having a natural conversation.
+You are Reskill, a warm and friendly AI Career Coach having a natural conversation.
 
 User Profile:
 - Name: $_userName

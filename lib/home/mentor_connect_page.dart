@@ -771,16 +771,12 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
         horizontal: horizontalPadding,
         vertical: 12,
       ),
-      sliver: SliverGrid(
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: crossAxisCount,
-          childAspectRatio: isMobile ? 0.62 : 0.68,
-          crossAxisSpacing: isMobile ? 12 : 16,
-          mainAxisSpacing: isMobile ? 12 : 16,
-        ),
+      sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
-          (context, index) =>
-              _buildMentorCard(_filteredMentors[index], isMobile),
+          (context, index) => Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: _buildMentorCard(_filteredMentors[index], isMobile),
+          ),
           childCount: _filteredMentors.length,
         ),
       ),
@@ -788,245 +784,161 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
   }
 
   Widget _buildMentorCard(Map<String, dynamic> mentor, bool isMobile) {
-    // Gradient colors for variety
-    final gradients = [
-      [Color(0xFFFFB5D5), Color(0xFFFFD5E5)],
-      [Color(0xFFFFE5A0), Color(0xFFFFF5C0)],
-      [Color(0xFFB5D5FF), Color(0xFFD5E5FF)],
-      [Color(0xFFD5FFB5), Color(0xFFE5FFC0)],
-    ];
-    final gradientIndex = (mentor['id'] ?? 0).hashCode.abs() % gradients.length;
-    final gradient = gradients[gradientIndex];
+    final expertise = mentor['expertise'] as List? ?? [];
+    final name = mentor['full_name']?.toString() ?? 'Mentor';
+    final position = mentor['current_position']?.toString() ?? 'Professional';
 
-    final expertise = mentor['expertise'] as List<dynamic>? ?? [];
-    final rating = (mentor['rating'] ?? 0.0).toDouble();
-    final name = mentor['full_name']?.toString() ?? 'Unknown';
-    final position = mentor['current_position']?.toString() ?? 'Mentor';
-
-    return InkWell(
-      onTap: () => _showConnectDialog(mentor),
-      borderRadius: BorderRadius.circular(12),
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => MentorDetailPage(mentor: mentor),
+        ),
+      ),
       child: Container(
+        constraints: BoxConstraints(minHeight: isMobile ? 180 : 200),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey[200]!, width: 1),
+          borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: Offset(0, 2),
-              spreadRadius: 1,
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 15,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Gradient header with profile picture
-            Container(
-              height: isMobile ? 65 : 70,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: gradient,
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+            Expanded(
+              flex: 2,
+              child: ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(24),
+                  topLeft: Radius.circular(24),
                 ),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-              ),
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  // Profile picture
-                  Positioned(
-                    bottom: -25,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 3),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.1),
-                              blurRadius: 8,
-                              offset: Offset(0, 2),
-                            ),
-                          ],
+                child: (mentor['avatar'] != null && mentor['avatar'].toString().isNotEmpty)
+                    ? Image.network(
+                        mentor['avatar'].toString(),
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: Colors.grey[100],
+                          child: const Icon(Icons.person, size: 40, color: Colors.grey),
                         ),
-                        child: _buildProfileAvatar(mentor, isMobile),
+                      )
+                    : Container(
+                        color: Colors.grey[100],
+                        child: const Icon(Icons.person, size: 40, color: Colors.grey),
                       ),
-                    ),
-                  ),
-                ],
               ),
             ),
-            SizedBox(height: 28),
-
-            // Rating badge
-            if (rating > 0)
-              Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isMobile ? 8 : 9,
-                  vertical: isMobile ? 2 : 3,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Color(0xFFFFB300), width: 1.5),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+            // Right Side: Info and Actions
+            Expanded(
+              flex: 3,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            name,
+                            style: GoogleFonts.inter(
+                              fontSize: isMobile ? 15 : 17,
+                              fontWeight: FontWeight.w900,
+                              color: const Color(0xFF1E293B),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Text('🇬🇧', style: TextStyle(fontSize: 14)),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
                     Text(
-                      rating.toStringAsFixed(1),
+                      position,
                       style: GoogleFonts.inter(
-                        color: Color(0xFFFFB300),
-                        fontWeight: FontWeight.bold,
-                        fontSize: isMobile ? 9 : 10,
+                        fontSize: isMobile ? 10 : 11,
+                        color: Colors.grey[500],
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Helping with:',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        color: Colors.grey[400],
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    SizedBox(width: 3),
-                    Icon(
-                      Icons.star,
-                      color: Color(0xFFFFB300),
-                      size: isMobile ? 9 : 10,
+                    const SizedBox(height: 6),
+                    // Expertise Chips
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: expertise.take(2).map((item) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            item.toString(),
+                            style: GoogleFonts.inter(
+                              fontSize: 9,
+                              color: const Color(0xFF1E293B),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const Spacer(),
+                    // Action Button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => _showConnectDialog(mentor),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF5367FF),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: Text(
+                          'Connect',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
                     ),
                   ],
-                ),
-              ),
-            SizedBox(height: 6),
-
-            // Name
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: Text(
-                name,
-                style: GoogleFonts.inter(
-                  fontWeight: FontWeight.bold,
-                  fontSize: isMobile ? 13 : 14,
-                  color: Color(0xFF1B2347),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-              ),
-            ),
-            SizedBox(height: 2),
-
-            // Position
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: Text(
-                position,
-                style: GoogleFonts.inter(
-                  color: Color(0xFF5E9EF5),
-                  fontSize: isMobile ? 10 : 11,
-                  fontWeight: FontWeight.w500,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-              ),
-            ),
-            SizedBox(height: 6),
-
-            // Expertise
-            if (expertise.isNotEmpty)
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12),
-                child: Text(
-                  expertise.take(2).join(', '),
-                  style: GoogleFonts.inter(
-                    fontSize: isMobile ? 10 : 11,
-                    color: Colors.black87,
-                    height: 1.3,
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-
-            Spacer(),
-
-            // Connect button
-            Padding(
-              padding: EdgeInsets.all(12),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => _showConnectDialog(mentor),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFF5E9EF5),
-                    foregroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(vertical: isMobile ? 8 : 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Connect',
-                        style: GoogleFonts.inter(
-                          fontSize: isMobile ? 11 : 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      SizedBox(width: 4),
-                      Icon(Icons.link, size: isMobile ? 14 : 16),
-                    ],
-                  ),
                 ),
               ),
             ),
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildProfileAvatar(Map<String, dynamic> mentor, bool isMobile) {
-    final avatarUrl = mentor['avatar']?.toString();
-    final name = mentor['full_name']?.toString() ?? 'M';
-    final initial = name.isNotEmpty ? name[0].toUpperCase() : 'M';
-    final radius = isMobile ? 26.0 : 30.0;
-
-    if (avatarUrl != null && avatarUrl.isNotEmpty) {
-      return CircleAvatar(
-        radius: radius,
-        backgroundColor: Colors.grey[200],
-        child: ClipOval(
-          child: Image.network(
-            avatarUrl,
-            width: radius * 2,
-            height: radius * 2,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _buildAvatarFallback(initial, radius),
-            loadingBuilder: (context, child, loadingProgress) {
-              if (loadingProgress == null) return child;
-              return Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Color(0xFF5E9EF5),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      );
-    }
-
-    return _buildAvatarFallback(initial, radius);
+    // Keep internal helper to prevent build errors elsewhere, though not used in row design
+    return const SizedBox.shrink();
   }
 
   Widget _buildAvatarFallback(String initial, double radius) {

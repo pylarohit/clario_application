@@ -23,6 +23,8 @@ import 'calendar_page.dart';
 import 'career_board_page.dart';
 import 'chat_page.dart';
 import 'mentor_connect_page.dart';
+import 'mentor_detail_page.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'quiz/quiz_start_dialog.dart';
 
 /// Main Home Page Widget
@@ -140,6 +142,15 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // DATA - Colleges List (Loaded from Supabase)
   // ============================================================================
   List<Map<String, dynamic>> colleges = [];
+
+  void _showConnectDialog(Map<String, dynamic> mentor) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MentorDetailPage(mentor: mentor),
+      ),
+    );
+  }
 
   // ============================================================================
   // LIFECYCLE METHODS
@@ -1190,7 +1201,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 'ReSkill',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 18,
+                  fontSize: 22,
                   fontWeight: FontWeight.w900,
                   letterSpacing: -0.5,
                 ),
@@ -1202,35 +1213,42 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   Stack(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(Icons.notifications_outlined, color: Colors.white, size: 22),
+                        child: const Icon(Icons.notifications_outlined, color: Colors.white, size: 24),
                       ),
                       Positioned(
                         right: 8,
                         top: 8,
                         child: Container(
-                          width: 6,
-                          height: 6,
+                          width: 8,
+                          height: 8,
                           decoration: const BoxDecoration(color: Color(0xFFFF5252), shape: BoxShape.circle),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(width: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: _userPhotoUrl != null 
-                        ? Image.network(_userPhotoUrl!, width: 36, height: 36, fit: BoxFit.cover)
-                        : Container(
-                            width: 36,
-                            height: 36,
-                            color: Colors.white24,
-                            child: Center(child: Text(_userInitial, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                          ),
+                  const SizedBox(width: 10),
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _bottomNavIndex = 3;
+                      });
+                    },
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: _userPhotoUrl != null 
+                          ? Image.network(_userPhotoUrl!, width: 42, height: 42, fit: BoxFit.cover)
+                          : Container(
+                              width: 42,
+                              height: 42,
+                              color: Colors.white24,
+                              child: Center(child: Text(_userInitial, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14))),
+                            ),
+                    ),
                   ),
                 ],
               ),
@@ -1264,70 +1282,48 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ),
           ),
           const SizedBox(height: 28),
-          // Row 3: Banner Placeholder
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.white.withOpacity(0.15), Colors.white.withOpacity(0.05)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.white.withOpacity(0.1)),
-            ),
-            child: Row(
+          // Row 3: Banner Carousel
+          SizedBox(
+            height: 210,
+            child: PageView(
+              controller: _pageController,
+              onPageChanged: (index) {
+                setState(() {
+                  _currentCarouselIndex = index;
+                });
+              },
               children: [
-                Expanded(
-                  flex: 3,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'FIND YOUR DREAM JOB',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Discover opportunities that match your career goals.',
-                        style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13),
-                      ),
-                      const SizedBox(height: 20),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const CareerBoardPage()));
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF4A90E2),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text('Explore Jobs'),
-                            const SizedBox(width: 8),
-                            const Icon(Icons.arrow_forward, size: 16),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                _buildModernBanner(
+                  title: 'FIND YOUR DREAM JOB',
+                  subtitle: 'Discover opportunities that match your career goals.',
+                  image: 'assets/element5.png',
+                  onTap: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const CareerBoardPage()));
+                  },
                 ),
-                Expanded(
-                  flex: 2,
-                  child: Image.asset(
-                    'assets/element5.png', // Fallback to existing asset
-                    height: 100,
-                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.auto_awesome, color: Colors.white38, size: 80),
-                  ),
+                _buildModernBanner(
+                  title: 'CONNECT WITH MENTORS',
+                  subtitle: 'Get guidance from industry experts and professionals.',
+                  image: 'assets/element1.png',
+                  onTap: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const MentorConnectPage()));
+                  },
+                ),
+                _buildModernBanner(
+                  title: 'AI CAREER COACH',
+                  subtitle: 'Get personalized career path recommendations.',
+                  image: 'assets/element3.png',
+                  onTap: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const CareerCoachPage()));
+                  },
+                ),
+                _buildModernBanner(
+                  title: 'SKILL ROADMAPS',
+                  subtitle: 'Step-by-step guides to master any new skill.',
+                  image: 'assets/element4.png',
+                  onTap: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const RoadmapPage()));
+                  },
                 ),
               ],
             ),
@@ -1336,13 +1332,14 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           // Page Indicator
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(4, (index) => Container(
-              width: 8,
+            children: List.generate(4, (index) => AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              width: _currentCarouselIndex == index ? 20 : 8,
               height: 8,
               margin: const EdgeInsets.symmetric(horizontal: 4),
               decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: index == 0 ? Colors.white : Colors.white24,
+                borderRadius: BorderRadius.circular(4),
+                color: _currentCarouselIndex == index ? Colors.white : Colors.white24,
               ),
             )),
           ),
@@ -1351,7 +1348,86 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  /// The hero banner is now integrated into the header for this design
+  /// Build individual banner page for the hero carousel
+  Widget _buildModernBanner({
+    required String title,
+    required String subtitle,
+    required String image,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.white.withOpacity(0.15), Colors.white.withOpacity(0.05)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  subtitle,
+                  style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: onTap,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF4A90E2),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    elevation: 0,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Text('Explore', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      SizedBox(width: 6),
+                      Icon(Icons.arrow_forward, size: 14),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Image.asset(
+              image,
+              height: 100,
+              errorBuilder: (context, error, stackTrace) => const Icon(Icons.auto_awesome, color: Colors.white38, size: 60),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Deprecated, now integrated into header
   Widget _buildHeroBanner() {
     return const SizedBox.shrink();
   }
@@ -1547,10 +1623,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
               Expanded(
                 child: Text(
                   'Welcome, $_userName',
-                  style: const TextStyle(
-                    fontSize: 24,
+                  style: GoogleFonts.inter(
+                    fontSize: 22,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
+                    color: const Color(0xFF1B2347),
                     letterSpacing: -0.5,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -1598,12 +1674,13 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ],
           ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'AI Tools & Resources',
-            style: TextStyle(
-              fontSize: 18,
+            style: GoogleFonts.inter(
+              fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF1E293B),
+              color: const Color(0xFF1B2347),
+              letterSpacing: -0.5,
             ),
           ),
         ],
@@ -1720,24 +1797,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // RECOMMENDED MENTORS - Mentor Cards Carousel
   // ============================================================================
 
-  /// Build the recommended mentors section with horizontal scroll
   Widget _buildRecommendedMentors() {
-    return Container(
-      padding: EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 20,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1745,14 +1808,15 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 children: [
                   Text(
                     'Recommended Mentors',
-                    style: TextStyle(
-                      fontSize: 18,
+                    style: GoogleFonts.inter(
+                      fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1B2347),
+                      color: const Color(0xFF1B2347),
+                      letterSpacing: -0.5,
                     ),
                   ),
-                  SizedBox(width: 10),
-                  Icon(Icons.people, color: Color(0xFF5E9EF5), size: 20),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.group, color: Color(0xFF5E9EF5), size: 24),
                 ],
               ),
               OutlinedButton(
@@ -1760,16 +1824,16 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => MentorConnectPage(),
+                      builder: (context) => const MentorConnectPage(),
                     ),
                   );
                 },
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Color(0xFF5E9EF5),
-                  side: BorderSide(color: Colors.grey[300]!, width: 1),
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  foregroundColor: const Color(0xFF5E9EF5),
+                  side: BorderSide(color: Colors.grey[200]!, width: 1.5),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
                 child: Row(
@@ -1777,26 +1841,26 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   children: [
                     Text(
                       'More',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    SizedBox(width: 6),
-                    Icon(Icons.arrow_forward, size: 10),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.arrow_forward, size: 14),
                   ],
                 ),
               ),
             ],
           ),
-          SizedBox(height: 10),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 300,
+            height: 340, // Height for vertical cards
             child: mentors.isEmpty
                 ? Center(
                     child: Text(
                       'No mentors available',
-                      style: TextStyle(color: Colors.grey[600]),
+                      style: GoogleFonts.inter(color: Colors.grey[400]),
                     ),
                   )
                 : ListView.builder(
@@ -1808,124 +1872,78 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   ),
           ),
         ],
-      ),
-    );
-  }
+      );
+    }
+
 
   Widget _buildMentorCard(Map<String, dynamic> mentor) {
-    // Different gradient colors for variety
-    final gradients = [
-      [Color(0xFFFFB5D5), Color(0xFFFFD5E5)],
-      [Color(0xFFFFE5A0), Color(0xFFFFF5C0)],
-      [Color(0xFFB5D5FF), Color(0xFFD5E5FF)],
+    // Solid soft colors for headers
+    final headerColors = [
+      const Color(0xFFFEF3C7), // Soft yellow/orange from photo
+      const Color(0xFFFFD1DC), // Soft pink
+      const Color(0xFFE2F9C0), // Soft green
+      const Color(0xFFE0F2FE), // Soft blue
     ];
-    final gradient = gradients[mentor['id'].hashCode % gradients.length];
+    final colorIndex = (mentor['id'] ?? 0).hashCode.abs() % headerColors.length;
+    final headerColor = headerColors[colorIndex];
+    
+    final expertise = mentor['expertise'] as List? ?? [];
+    final name = mentor['full_name']?.toString() ?? 'Mentor';
+    final position = mentor['current_position']?.toString() ?? 'Professional';
+    final rating = (mentor['rating'] ?? 5.0).toDouble();
 
     return Container(
-      width: 200,
-      margin: EdgeInsets.only(right: 12),
+      width: 220,
+      margin: const EdgeInsets.only(right: 16, bottom: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!, width: 1),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.grey[100]!),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 15,
-            offset: Offset(0, 0),
-            spreadRadius: 2,
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Column(
         children: [
-          // Gradient header with profile picture
+          // Header background with profile image
           Container(
-            height: 70,
+            height: 80,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: gradient,
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+              color: headerColor,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             ),
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                // Profile picture
                 Positioned(
-                  bottom: -22,
+                  bottom: -30,
                   left: 0,
                   right: 0,
                   child: Center(
                     child: Container(
-                      decoration: BoxDecoration(
+                      padding: const EdgeInsets.all(3),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 3),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 8,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
                       ),
                       child: CircleAvatar(
-                        radius: 30,
-                        backgroundColor: Colors.grey[200],
-                        child:
-                            mentor['avatar'] != null &&
-                                mentor['avatar'].toString().isNotEmpty
-                            ? ClipOval(
-                                child: Image.network(
-                                  mentor['avatar'],
-                                  width: 60,
-                                  height: 60,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Center(
-                                      child: Text(
-                                        (mentor['full_name']?[0] ?? 'M')
-                                            .toUpperCase(),
-                                        style: TextStyle(
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.grey[600],
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  loadingBuilder:
-                                      (context, child, loadingProgress) {
-                                        if (loadingProgress == null) {
-                                          return child;
-                                        }
-                                        return Center(
-                                          child: CircularProgressIndicator(
-                                            value:
-                                                loadingProgress
-                                                        .expectedTotalBytes !=
-                                                    null
-                                                ? loadingProgress
-                                                          .cumulativeBytesLoaded /
-                                                      loadingProgress
-                                                          .expectedTotalBytes!
-                                                : null,
-                                            strokeWidth: 2,
-                                          ),
-                                        );
-                                      },
-                                ),
+                        radius: 35,
+                        backgroundColor: Colors.grey[100],
+                        backgroundImage: mentor['avatar'] != null && mentor['avatar'].toString().isNotEmpty
+                            ? (mentor['avatar'].toString().startsWith('assets/') 
+                                ? AssetImage(mentor['avatar']) as ImageProvider
+                                : NetworkImage(mentor['avatar']))
+                            : null,
+                        child: (mentor['avatar'] == null || mentor['avatar'].toString().isEmpty)
+                            ? Text(
+                                name.isNotEmpty ? name[0].toUpperCase() : 'M',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
                               )
-                            : Text(
-                                (mentor['full_name']?[0] ?? 'M').toUpperCase(),
-                                style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
+                            : null,
                       ),
                     ),
                   ),
@@ -1933,107 +1951,114 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ],
             ),
           ),
-          SizedBox(height: 26),
-          // Rating badge
+          const SizedBox(height: 35),
+          
+          // Rating Badge
           Container(
-            padding: EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Color(0xFFFFB300), width: 1.5),
+              border: Border.all(color: const Color(0xFFFFB300), width: 1.5),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  '${mentor['rating']}',
-                  style: TextStyle(
-                    color: Color(0xFFFFB300),
+                  rating.toStringAsFixed(1),
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFFFFB300),
                     fontWeight: FontWeight.bold,
                     fontSize: 10,
                   ),
                 ),
-                SizedBox(width: 3),
-                Icon(Icons.star, color: Color(0xFFFFB300), size: 10),
+                const SizedBox(width: 3),
+                const Icon(Icons.star, color: Color(0xFFFFB300), size: 10),
               ],
             ),
           ),
-          SizedBox(height: 5),
+          const SizedBox(height: 10),
+
           // Name
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
-              mentor['full_name'],
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-                color: Color(0xFF1B2347),
+              name,
+              style: GoogleFonts.inter(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                color: const Color(0xFF1B2347),
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
             ),
           ),
-          SizedBox(height: 2),
+          
           // Position
           Text(
-            mentor['current_position'],
-            style: TextStyle(
-              color: Color(0xFF5E9EF5),
-              fontSize: 11,
+            position,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              color: const Color(0xFF5E9EF5),
               fontWeight: FontWeight.w500,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          SizedBox(height: 5),
+          const SizedBox(height: 8),
+
           // Expertise
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
-              'Expertise: ${(mentor['expertise'] as List).join(', ')}',
-              style: TextStyle(fontSize: 11, color: Colors.black, height: 1.3),
+              'Expertise: ${expertise.take(3).join(', ')}',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                color: Colors.grey[600],
+                height: 1.3,
+              ),
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          SizedBox(height: 1),
-          // Book Session button
+          
+          const Spacer(),
+
+          // Book Session Button
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.all(16),
             child: SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {},
+                onPressed: () => _showConnectDialog(mentor),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFF5E9EF5),
+                  backgroundColor: const Color(0xFF5E9EF5),
                   foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(7),
-                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
                   elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       'Book Session',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    SizedBox(width: 4),
-                    Icon(Icons.video_call, size: 18),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.videocam, size: 18),
                   ],
                 ),
               ),
             ),
           ),
-          SizedBox(height: 12),
         ],
       ),
     );

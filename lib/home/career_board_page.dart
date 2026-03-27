@@ -16,9 +16,9 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
-import 'dart:convert';
-import 'dart:io';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import 'dart:ui';
+import 'dart:convert';
 
 /// Career Board Page Widget
 class CareerBoardPage extends StatefulWidget {
@@ -228,17 +228,14 @@ class _CareerBoardPageState extends State<CareerBoardPage> {
   }
   
   /// Fetch YouTube videos using YouTube Data API
+  /// Fetch YouTube videos using YouTube Data API with SerpAPI Fallback
   Future<void> _fetchYoutubeVideos({String? pageToken, bool isLoadMore = false}) async {
     if (selectedCareer.isEmpty) return;
     
     final youtubeApiKey = dotenv.env['NEXT_PUBLIC_YOUTUBE_API_KEY'] ?? '';
     if (youtubeApiKey.isEmpty) {
-      debugPrint('YouTube API key not found');
-      setState(() {
-        _youtubeLoadFailed = true;
-        _isLoadingYoutube = false;
-      });
-      return;
+      debugPrint('YouTube API key not found, trying fallback directly');
+      return _fetchYoutubeVideosSerpFallback(pageToken: pageToken, isLoadMore: isLoadMore);
     }
 
     setState(() {
@@ -251,113 +248,57 @@ class _CareerBoardPageState extends State<CareerBoardPage> {
     });
 
     try {
-      final Uri url;
       final broadQuery = '$selectedCareer career guidance growth tutorial';
       
-      if (kIsWeb) {
-        // Use existing serpapi-proxy (already deployed) to fetch videos on web
-        final supabaseUrl = dotenv.env['NEXT_PUBLIC_SUPABASE_URL'] ?? '';
-        var urlStr = '$supabaseUrl/functions/v1/serpapi-proxy?engine=google_videos&q=${Uri.encodeComponent(broadQuery)}&location=India&num=20';
-        if (pageToken != null) urlStr += '&start=${Uri.encodeComponent(pageToken)}';
-        url = Uri.parse(urlStr);
-      } else {
-        // Native can use direct Google API with user's key
-        var urlStr = 'https://www.googleapis.com/youtube/v3/search?part=snippet&q=${Uri.encodeComponent(broadQuery)}&type=video&maxResults=20&order=relevance&key=$youtubeApiKey';
-        if (pageToken != null) urlStr += '&pageToken=${Uri.encodeComponent(pageToken)}';
-        url = Uri.parse(urlStr);
+      // Attempt to get key from .env, but use hardcoded fallback as priority for this fix
+      String currentApiKey = youtubeApiKey.trim();
+      if (currentApiKey.isEmpty || currentApiKey.length < 10) {
+        currentApiKey = 'AIzaSyDA0tOltyY42RLJi3bZV1gNBc5tktAq99w'; 
       }
-
-      final response = await http.get(url);
+      
+      final urlStr = 'https://www.googleapis.com/youtube/v3/search'
+          '?part=snippet'
+          '&q=${Uri.encodeComponent(broadQuery)}'
+          '&type=video'
+          '&maxResults=15'
+          '&order=relevance'
+          '&key=$currentApiKey'
+          '${pageToken != null ? '&pageToken=${Uri.encodeComponent(pageToken)}' : ''}';
+          
+      final uri = Uri.parse(urlStr);
+      final response = await http.get(uri);
+      debugPrint('📡 YouTube API Response: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        
-        // Handle both SERP (on Web) and YouTube Direct (Native) formats
-        final List<dynamic> results;
-        final String? nextToken;
-        
-        if (kIsWeb) {
-          results = data['video_results'] as List<dynamic>? ?? [];
-          nextToken = data['serpapi_pagination']?['next']?.toString();
-        } else {
-          results = data['items'] as List<dynamic>? ?? [];
-          nextToken = data['nextPageToken']?.toString();
+        final items = data['items'] as List<dynamic>? ?? [];
+        final nextToken = data['nextPageToken']?.toString();
+
+        if (items.isEmpty && !isLoadMore) {
+          debugPrint('⚠️ Empty response from YouTube API, falling back to SerpAPI...');
+          return _fetchYoutubeVideosSerpFallback(pageToken: pageToken, isLoadMore: isLoadMore);
         }
 
-        if (results.isEmpty && !isLoadMore) {
-          setState(() {
-            _youtubeList = [];
-            _isLoadingYoutube = false;
-            _youtubeLoadFailed = true;
-            _hasMoreYoutube = false;
-          });
-          return;
-        }
-
-        final newVideos = results.map<Map<String, String>>((item) {
-          if (kIsWeb) {
-            // Mapping from SERP google_videos
-            final title = item['title']?.toString() ?? 'Video Title';
-            String link = item['link']?.toString() ?? '';
-            
-            // Unwrap google.com/url if present (common in search results)
-            if (link.contains('google.com/url')) {
-              final uri = Uri.tryParse(link);
-              if (uri != null && uri.queryParameters.containsKey('url')) {
-                link = uri.queryParameters['url']!;
-              }
-            }
-            
-            // Extract videoId more robustly from various YouTube formats
-            String videoId = '';
-            final idMatch = RegExp(r'(?:v=|\/|embed\/|youtu.be\/)([0-9A-Za-z_-]{11})').firstMatch(link);
-            if (idMatch != null) {
-              videoId = idMatch.group(1)!;
-            } else if (link.contains('v=')) {
-              videoId = link.split('v=').last.split('&').first;
-            }
-            if (videoId.length > 11) videoId = videoId.substring(0, 11);
-            
-            // Try different thumbnail locations in SERP response
-            String thumb = item['thumbnail']?.toString() ?? 
-                          item['rich_snippet']?['top']?['thumbnail']?.toString() ??
-                          item['rich_snippet']?['video']?['thumbnail']?.toString() ?? '';
-            
-            // Final fallback to YouTube's own high-quality imagery
-            if (thumb.isEmpty && videoId.isNotEmpty) {
-              thumb = 'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
-            }
-            
-            return {
-              'title': title,
-              'channel': item['channel'] ?? item['source'] ?? 'YouTube',
-              'description': item['description'] ?? '',
-              'thumbnail': thumb,
-              'videoId': videoId,
-              'url': link.isNotEmpty ? link : 'https://www.youtube.com/watch?v=$videoId',
-              'publishedAt': item['posted_at']?.toString() ?? '',
-            };
-          } else {
-            // Mapping from YouTube Data API (Native)
-            final snippet = item['snippet'] ?? {};
-            final videoId = item['id']?['videoId']?.toString() ?? '';
-            String thumb = snippet['thumbnails']?['maxres']?['url']?.toString() ??
-                   snippet['thumbnails']?['high']?['url']?.toString() ?? 
-                   snippet['thumbnails']?['medium']?['url']?.toString() ?? '';
-                   
-            if (thumb.isEmpty && videoId.isNotEmpty) {
-              thumb = 'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
-            }
-            return {
-              'title': snippet['title']?.toString() ?? 'Video Title',
-              'channel': snippet['channelTitle']?.toString() ?? 'YouTube',
-              'description': snippet['description']?.toString() ?? '',
-              'thumbnail': thumb,
-              'videoId': videoId,
-              'url': 'https://www.youtube.com/watch?v=$videoId',
-              'publishedAt': snippet['publishedAt']?.toString() ?? '',
-            };
+        final newVideos = items.map<Map<String, String>>((item) {
+          final snippet = item['snippet'] ?? {};
+          final videoId = item['id']?['videoId']?.toString() ?? '';
+          String thumb = snippet['thumbnails']?['maxres']?['url']?.toString() ??
+                 snippet['thumbnails']?['high']?['url']?.toString() ?? 
+                 snippet['thumbnails']?['medium']?['url']?.toString() ?? '';
+          
+          if (thumb.isEmpty && videoId.isNotEmpty) {
+            thumb = 'https://i.ytimg.com/vi/$videoId/mqdefault.jpg';
           }
+          
+          return {
+            'title': snippet['title']?.toString() ?? 'Video Title',
+            'channel': snippet['channelTitle']?.toString() ?? 'YouTube',
+            'description': snippet['description']?.toString() ?? '',
+            'thumbnail': thumb,
+            'videoId': videoId,
+            'url': 'https://www.youtube.com/watch?v=$videoId',
+            'publishedAt': snippet['publishedAt']?.toString() ?? '',
+          };
         }).toList();
 
         setState(() {
@@ -372,20 +313,90 @@ class _CareerBoardPageState extends State<CareerBoardPage> {
           _isLoadingMoreYoutube = false;
           _youtubeLoadFailed = false;
         });
+      } else if (response.statusCode == 400 || response.statusCode == 403) {
+        // Expired or Invalid key - perform silent fallback to SerpAPI
+        debugPrint('🚫 Key Expired/Invalid (${response.statusCode}), executing SerpAPI fallback...');
+        return _fetchYoutubeVideosSerpFallback(pageToken: pageToken, isLoadMore: isLoadMore);
       } else {
-        debugPrint('YouTube API error: ${response.statusCode}, ${response.body}');
-        setState(() {
-          _isLoadingYoutube = false;
-          _isLoadingMoreYoutube = false;
-          _youtubeLoadFailed = !isLoadMore;
-        });
+        throw Exception('Status ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint('Error fetching YouTube videos: $e');
+      debugPrint('Error in direct YouTube API: $e, trying fallback...');
+      return _fetchYoutubeVideosSerpFallback(pageToken: pageToken, isLoadMore: isLoadMore);
+    }
+  }
+
+  /// Silent fallback to SerpAPI to ensure videos are ALWAYS displayed
+  Future<void> _fetchYoutubeVideosSerpFallback({String? pageToken, bool isLoadMore = false}) async {
+    try {
+      final broadQuery = '$selectedCareer career guidance growth tutorial';
+      final serpApiKey = dotenv.env['SERPAPI_KEY'];
+      final supabaseUrl = dotenv.env['NEXT_PUBLIC_SUPABASE_URL'] ?? '';
+      
+      final Uri url;
+      if (kIsWeb) {
+        var urlStr = '$supabaseUrl/functions/v1/serpapi-proxy?engine=google_videos&q=${Uri.encodeComponent(broadQuery)}&num=15';
+        if (pageToken != null) urlStr += '&start=${Uri.encodeComponent(pageToken)}';
+        url = Uri.parse(urlStr);
+      } else {
+        var urlStr = 'https://serpapi.com/search.json?engine=google_videos&q=${Uri.encodeComponent(broadQuery)}&api_key=$serpApiKey&num=15';
+        if (pageToken != null) urlStr += '&start=${Uri.encodeComponent(pageToken)}';
+        url = Uri.parse(urlStr);
+      }
+
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final results = data['video_results'] as List<dynamic>? ?? [];
+        final nextToken = data['serpapi_pagination']?['next']?.toString();
+
+        final newVideos = results.map<Map<String, String>>((item) {
+          final title = item['title']?.toString() ?? 'Video Title';
+          String link = item['link']?.toString() ?? '';
+          if (link.contains('google.com/url')) {
+            final uri = Uri.tryParse(link);
+            if (uri != null && uri.queryParameters.containsKey('url')) link = uri.queryParameters['url']!;
+          }
+          String videoId = '';
+          final match = RegExp(r'(?:v=|\/|embed\/|youtu.be\/)([0-9A-Za-z_-]{11})').firstMatch(link);
+          if (match != null) videoId = match.group(1)!;
+
+          String thumb = item['thumbnail']?.toString() ?? '';
+          if (thumb.isEmpty && videoId.isNotEmpty) thumb = 'https://i.ytimg.com/vi/$videoId/mqdefault.jpg';
+
+          return {
+            'title': title,
+            'channel': item['channel'] ?? item['source'] ?? 'YouTube',
+            'description': item['description'] ?? '',
+            'thumbnail': thumb,
+            'videoId': videoId,
+            'url': link.isNotEmpty ? link : 'https://www.youtube.com/watch?v=$videoId',
+            'publishedAt': item['posted_at']?.toString() ?? '',
+          };
+        }).toList();
+
+        setState(() {
+          if (isLoadMore) {
+            _youtubeList.addAll(newVideos);
+          } else {
+            _youtubeList = newVideos;
+          }
+          _youtubeNextPageToken = nextToken;
+          _hasMoreYoutube = nextToken != null;
+          _isLoadingYoutube = false;
+          _isLoadingMoreYoutube = false;
+          _youtubeLoadFailed = false;
+        });
+        debugPrint('✅ SerpAPI Fallback successful: ${_youtubeList.length} videos found');
+      } else {
+        throw Exception('SerpAPI Error ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('❌ Critical Video Fetch Error: $e');
       setState(() {
         _isLoadingYoutube = false;
         _isLoadingMoreYoutube = false;
-        _youtubeLoadFailed = !isLoadMore;
+        _youtubeLoadFailed = true;
       });
     }
   }
@@ -3391,14 +3402,16 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
               Stack(
                 children: [
                   Container(
-                    height: 120,
+                    height: 140, // Slightly increased height for the better artwork
                     width: double.infinity,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF2F7FF),
-                      image: const DecorationImage(
-                        image: NetworkImage('https://images.unsplash.com/photo-1541339907198-e08759dfc3ef?auto=format&fit=crop&q=80&w=800'),
+                      color: const Color(0xFFE5E7EB),
+                      image: DecorationImage(
+                        image: const AssetImage('assets/college_card_header.png'),
                         fit: BoxFit.cover,
-                        opacity: 0.8,
+                        onError: (exception, stackTrace) {
+                           // Fallback will be handled by the errorBuilder/decoration if needed
+                        },
                       ),
                     ),
                   ),
@@ -3715,6 +3728,7 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
             video['thumbnail'] ?? '',
             video['url'] ?? '',
             video['description'] ?? '',
+            videoId: video['videoId'] ?? '',
           ),
         )).toList(),
         if (_hasMoreYoutube)
@@ -3735,8 +3749,9 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
     String channel,
     String thumbnail,
     String url,
-    String description,
-  ) {
+    String description, {
+    String videoId = '',
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 24),
       decoration: BoxDecoration(
@@ -3754,7 +3769,10 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
         borderRadius: BorderRadius.circular(24),
         child: InkWell(
           onTap: () async {
-            if (url.isNotEmpty) {
+            if (videoId.isNotEmpty && kIsWeb) {
+               // Show in-app player for Web using iframe embed
+               _showInAppPlayer(title, videoId);
+            } else if (url.isNotEmpty) {
               final uri = Uri.tryParse(url);
               if (uri != null && await canLaunchUrl(uri)) {
                 await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -3983,6 +4001,119 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
         ),
       ),
     );
+  }
+
+  /// Show a beautiful in-app video player dialog using youtube_player_iframe
+  void _showInAppPlayer(String title, String videoId) {
+    // Initialize the professional YouTube controller
+    final controller = YoutubePlayerController.fromVideoId(
+      videoId: videoId,
+      autoPlay: true,
+      params: const YoutubePlayerParams(
+        showControls: true,
+        showFullscreenButton: true,
+        mute: false,
+        loop: false,
+        color: 'white',
+        strictRelatedVideos: true,
+      ),
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        final screenWidth = MediaQuery.of(context).size.width;
+        return Dialog(
+          backgroundColor: const Color(0xFF0F172A), // Premium Dark Slate
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          clipBehavior: Clip.antiAlias,
+          child: Container(
+            width: screenWidth > 1000 ? 900 : double.infinity,
+            constraints: const BoxConstraints(maxHeight: 700),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Premium Player Header
+                Container(
+                  padding: const EdgeInsets.all(16.0),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.05),
+                    border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.1))),
+                  ),
+                  child: Row(
+                    children: [
+                      const CircleAvatar(
+                        backgroundColor: Color(0xFFFF0000), // YouTube Red
+                        radius: 12,
+                        child: Icon(Icons.play_arrow, color: Colors.white, size: 14),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            color: Colors.white, 
+                            fontWeight: FontWeight.bold, 
+                            fontSize: 16,
+                            letterSpacing: -0.5,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 24),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                ),
+                // The actual video player section
+                AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: YoutubePlayer(
+                    controller: controller,
+                    backgroundColor: Colors.black,
+                  ),
+                ),
+                // Footer with contextual action
+                Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Resource: YouTube',
+                        style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.check_circle_rounded),
+                        label: const Text("Finish Watching"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF0F172A),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Helper to create IFrame on Web while being safe on Native
+  dynamic _createIFrameElement(String videoId) {
+    // No longer needed as we're using youtube_player_iframe for high-fidelity player
+    return null;
   }
 
   /// Build chip widget

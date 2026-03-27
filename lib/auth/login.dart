@@ -17,7 +17,8 @@ void main() async {
   final appLinks = AppLinks();
   appLinks.uriLinkStream.listen((uri) async {
     debugPrint('🔗 Deep Link Received: $uri');
-    await Supabase.instance.client.auth.getSessionFromUrl(uri);
+    await Supabase
+        .instance.client.auth.getSessionFromUrl(uri);
     debugPrint('✅ Session refreshed from deep link');
   });
   runApp(const MyApp());

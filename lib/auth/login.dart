@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:app_links/app_links.dart';
 import '../home/home.dart';
+import '../auth-mentor/mentor_login.dart'; // Mentor Login
 
 //Main App Entry Point
 void main() async {
@@ -400,7 +401,42 @@ class _LoginPageState extends State<LoginPage>
                         ],
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
+
+                    // ── Mentor Link ──────────────────────────────────────────
+                    Center(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Are you a Mentor ? ',
+                            style: GoogleFonts.raleway(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const MentorLoginPage(),
+                                ),
+                              );
+                            },
+                            child: Text(
+                              'Click here!',
+                              style: GoogleFonts.raleway(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF4285F4), // Premium Blue
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
 
                     // ── Error Message ───────────────────────────────────────
                     if (error.isNotEmpty)

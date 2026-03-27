@@ -2716,7 +2716,7 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'Browse curated Courses, Videos and Job Opportunities specifically for your career path.',
+                          'Browse curated Courses, Videos and Job Opportunities.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 14,
@@ -2812,46 +2812,73 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header with search results
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        // Header with search results and Refresh Action
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            RichText(
-              text: TextSpan(
-                text: 'Search results for ',
-                style: const TextStyle(
-                  fontSize: 15,
-                  color: Colors.black87,
-                ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TextSpan(
-                    text: selectedCareer,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      color: Color(0xFF5E9EF5),
-                      fontWeight: FontWeight.w600,
+                  RichText(
+                    text: TextSpan(
+                      text: 'Search results for ',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        color: Colors.black87,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: selectedCareer,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            color: Color(0xFF5E9EF5),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.track_changes, size: 18, color: Colors.grey[600]),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Track Jobs',
+                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                      ),
+                      const SizedBox(width: 16),
+                      Icon(Icons.favorite_border, size: 18, color: Colors.grey[600]),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Liked',
+                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.track_changes, size: 18, color: Colors.grey[600]),
-                const SizedBox(width: 4),
-                Text(
-                  'Track Jobs',
-                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+            // Refresh Button
+            Tooltip(
+              message: 'Refresh latest jobs',
+              child: Material(
+                color: const Color(0xFF5E9EF5).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  onTap: () => _fetchRealJobsData(),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    child: const Icon(
+                      Icons.refresh_rounded,
+                      color: Color(0xFF5E9EF5),
+                      size: 24,
+                    ),
+                  ),
                 ),
-                const SizedBox(width: 16),
-                Icon(Icons.favorite_border, size: 18, color: Colors.grey[600]),
-                const SizedBox(width: 4),
-                Text(
-                  'Liked',
-                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                ),
-              ],
+              ),
             ),
           ],
         ),

@@ -49,19 +49,16 @@ class _WaveClipper extends CustomClipper<Path> {
   @override
   Path getClip(Size size) {
     final path = Path();
-    path.lineTo(0, size.height - 50);
+    path.lineTo(0, size.height - 80);
+    
+    // Smooth deep wave
     path.quadraticBezierTo(
-      size.width * 0.25,
-      size.height,
-      size.width * 0.5,
-      size.height - 30,
-    );
-    path.quadraticBezierTo(
-      size.width * 0.75,
-      size.height - 60,
+      size.width * 0.45,
+      size.height + 40,
       size.width,
-      size.height - 20,
+      size.height - 60,
     );
+    
     path.lineTo(size.width, 0);
     path.close();
     return path;
@@ -71,43 +68,34 @@ class _WaveClipper extends CustomClipper<Path> {
   bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }
 
-// ─── Concentric Arcs Painter (purple wave pattern in header) ─────────────────
+// ─── Concentric Arcs Painter (pattern in header) ─────────────────
 class _ConcentricArcsPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
+      ..strokeWidth = 0.8; // Thinner lines
 
-    final center = Offset(size.width * 0.15, -size.height * 0.1);
-    const int arcCount = 22;
+    // Point of origin for concentric circles
+    final center = Offset(size.width * 0.1, -size.height * 0.2);
+    const int circleCount = 35; // More circles for better detail
 
-    for (int i = 0; i < arcCount; i++) {
-      final radius = 30.0 + i * 18.0;
-      final opacity = (0.35 - i * 0.012).clamp(0.05, 0.35);
+    for (int i = 0; i < circleCount; i++) {
+      final radius = 20.0 + i * 22.0;
+      // Very subtle lines as per photo
+      final opacity = (0.25 - i * 0.006).clamp(0.02, 0.25);
       paint.color = Colors.white.withValues(alpha: opacity);
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        -0.2,
-        3.14 * 0.7,
-        false,
-        paint,
-      );
+      
+      canvas.drawCircle(center, radius, paint);
     }
 
-    // Secondary arc group from top-right
-    final center2 = Offset(size.width * 0.95, -size.height * 0.25);
-    for (int i = 0; i < 14; i++) {
-      final radius = 25.0 + i * 16.0;
-      final opacity = (0.2 - i * 0.012).clamp(0.03, 0.2);
-      paint.color = Colors.white.withValues(alpha: opacity);
-      canvas.drawArc(
-        Rect.fromCircle(center: center2, radius: radius),
-        1.5,
-        3.14 * 0.6,
-        false,
-        paint,
-      );
+    // Optional cross-pattern lines from top-right for the network look
+    final center2 = Offset(size.width * 1.1, -size.height * 0.5);
+    for (int i = 0; i < 20; i++) {
+        final radius = 50.0 + i * 35.0;
+        final opacity = (0.15 - i * 0.005).clamp(0.01, 0.15);
+        paint.color = Colors.white.withValues(alpha: opacity);
+        canvas.drawCircle(center2, radius, paint);
     }
   }
 
@@ -319,74 +307,7 @@ class _LoginPageState extends State<LoginPage>
                       ),
                     ),
 
-                    // ── Remember Me / Forgot Password ───────────────────────
-                    if (!isSignup) ...[
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: Checkbox(
-                              value: _rememberMe,
-                              onChanged: (v) =>
-                                  setState(() => _rememberMe = v ?? false),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              side: BorderSide(color: Colors.grey[400]!),
-                              activeColor: const Color(0xFF9B59B6),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Remember me',
-                            style: GoogleFonts.raleway(
-                              fontSize: 13,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                          const Spacer(),
-                          TextButton(
-                            onPressed: () {},
-                            style: TextButton.styleFrom(
-                              padding: EdgeInsets.zero,
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            child: Text(
-                              'Forgot password?',
-                              style: GoogleFonts.raleway(
-                                fontSize: 13,
-                                color: const Color(0xFF9B59B6),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ] else ...[
-                      const SizedBox(height: 4),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () {},
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: Text(
-                            'Forgot password?',
-                            style: GoogleFonts.raleway(
-                              fontSize: 13,
-                              color: const Color(0xFF9B59B6),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    const SizedBox(height: 12),
 
                     const SizedBox(height: 24),
 
@@ -470,9 +391,9 @@ class _LoginPageState extends State<LoginPage>
                               style: GoogleFonts.raleway(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
-                                color: const Color(0xFF9B59B6),
+                                color: const Color(0xFF064D44),
                                 decoration: TextDecoration.underline,
-                                decorationColor: const Color(0xFF9B59B6),
+                                decorationColor: const Color(0xFF064D44),
                               ),
                             ),
                           ),
@@ -523,10 +444,10 @@ class _LoginPageState extends State<LoginPage>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFFB39DDB), // soft lavender
-              Color(0xFFCE93D8), // orchid
-              Color(0xFFF48FB1), // pink
-              Color(0xFFE1BEE7), // light purple
+              Color(0xFF064D44), // Main Teal
+              Color(0xFF0C7D6F), // Medium Teal
+              Color(0xFF1E3A37), // Darker Teal
+              Color(0xFF064D44), // Main Teal
             ],
           ),
         ),
@@ -594,14 +515,14 @@ class _LoginPageState extends State<LoginPage>
           borderRadius: BorderRadius.circular(30),
           gradient: const LinearGradient(
             colors: [
-              Color(0xFFF8BBD0), // soft pink
-              Color(0xFFCE93D8), // orchid
-              Color(0xFFB39DDB), // lavender
+              Color(0xFF0C7D6F), // Medium Teal
+              Color(0xFF064D44), // Main Teal
+              Color(0xFF064D44), // Main Teal
             ],
           ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFCE93D8).withValues(alpha: 0.35),
+              color: const Color(0xFF064D44).withValues(alpha: 0.3),
               blurRadius: 16,
               offset: const Offset(0, 6),
             ),

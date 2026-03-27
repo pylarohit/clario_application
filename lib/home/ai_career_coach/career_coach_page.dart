@@ -16,7 +16,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
+import 'package:file_picker/file_picker.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 
 // ============================================================================
 // DATA MODELS & CONSTANTS
@@ -44,8 +47,8 @@ class AppConstants {
   // Color palette
   static const Color primaryBlue = Color(0xFF5E9EF5);
   static const Color darkBlue = Color(0xFF1B2347);
-  static const Color lightBlue = Color(0xFFDCEBFD);
-  static const Color backgroundColor = Color(0xFFF5F7FA);
+  static const Color lightBlue = Color(0xFFF1F5FB);
+  static const Color backgroundColor = Colors.white;
   
   // AI Configuration
   static const String geminiModel = 'gemini-2.5-flash';
@@ -108,6 +111,12 @@ class _CareerCoachPageState extends State<CareerCoachPage> {
   List<Message> _messages = const [];
   bool _aiLoading = false;
   int _searchesRemaining = AppConstants.maxSearches;
+  
+  // Voice Recognition
+  final SpeechToText _speechToText = SpeechToText();
+  bool _speechEnabled = false;
+  bool _isListening = false;
+  String _lastWords = '';
 
   // ==========================================================================
   // AI CONFIGURATION: Gemini Model Instance
@@ -130,12 +139,14 @@ class _CareerCoachPageState extends State<CareerCoachPage> {
     super.initState();
     _initializeGemini();
     _loadUserProfile();
+    _initSpeech();
   }
 
   @override
   void dispose() {
     _searchController.dispose();
     _scrollController.dispose();
+    _speechToText.stop();
     super.dispose();
   }
 
@@ -523,6 +534,72 @@ Do not include explanation.
     });
   }
 
+  /// Initializes speech-to-text engine and requests permissions
+  void _initSpeech() async {
+    try {
+      _speechEnabled = await _speechToText.initialize(
+        onStatus: (status) {
+          debugPrint('🎙️ Speech status: $status');
+          if (status == 'done' || status == 'notListening') {
+            setState(() => _isListening = false);
+          }
+        },
+        onError: (error) {
+          debugPrint('🎙️ Speech error: $error');
+          setState(() => _isListening = false);
+        },
+      );
+      setState(() {});
+    } catch (e) {
+      debugPrint('🎙️ Speech init failed: $e');
+    }
+  }
+
+  /// Starts live voice recognition and transcribes results to search bar
+  void _startListening() async {
+    if (!_speechEnabled) {
+      _showWarning('Speech recognition not available. Please check permissions.');
+      return;
+    }
+
+    setState(() => _isListening = true);
+    _lastWords = '';
+
+    await _speechToText.listen(
+      onResult: (result) {
+        setState(() {
+          _lastWords = result.recognizedWords;
+          _searchController.text = _lastWords;
+        });
+      },
+    );
+  }
+
+  /// Manually stops voice recognition
+  void _stopListening() async {
+    await _speechToText.stop();
+    setState(() => _isListening = false);
+  }
+
+  /// Picks a document from the device for processing
+  Future<void> _pickFile() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'doc', 'docx', 'txt', 'jpg', 'jpeg', 'png', 'gif'],
+      );
+
+      if (result != null && result.files.single.name != null) {
+        final fileName = result.files.single.name;
+        _showSuccess('File selected: $fileName');
+        // Future: Handle file upload or text extraction here
+      }
+    } catch (e) {
+      debugPrint('❌ File picking error: $e');
+      _showError('Failed to pick file. Please try again.');
+    }
+  }
+
   /// Shows error snackbar with delete icon
   void _showError(String message) {
     if (!mounted) return;
@@ -577,49 +654,61 @@ Do not include explanation.
       backgroundColor: AppConstants.backgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.white,
-        elevation: 0,
+        elevation: 1.0,
+        shadowColor: Colors.black.withValues(alpha: 0.2),
+        centerTitle: false,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: AppConstants.darkBlue),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: AppConstants.darkBlue, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'AI Career Coach',
-          style: TextStyle(
-            color: AppConstants.darkBlue,
-            fontSize: isMobile ? 16 : 18,
-            fontWeight: FontWeight.bold,
-          ),
+          '', // Removed for minimalist look
         ),
       ),
-      body: Row(
-        children: [
-          // Left side - Chat area
-          Expanded(
-            child: Column(
-              children: [
-                // Messages area or welcome screen
-                Expanded(
-                  child: _messages.isEmpty
-                      ? _buildWelcomeScreen()
-                      : _buildChatArea(),
-                ),
-
-                // Input area at bottom
-                _buildInputArea(),
-              ],
-            ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFFEFE8FF), // Theme lavender top
+              Colors.white,      // Main chat background
+              Colors.white,
+              Color(0xFFEFE8FF), // Theme lavender bottom
+            ],
+            stops: [0.0, 0.15, 0.85, 1.0],
           ),
+        ),
+        child: Row(
+          children: [
+            // Left side - Chat area
+            Expanded(
+              child: Column(
+                children: [
+                  // Messages area or welcome screen
+                  Expanded(
+                    child: _messages.isEmpty
+                        ? _buildWelcomeScreen()
+                        : _buildChatArea(),
+                  ),
 
-          // Right sidebar (desktop only)
-          if (screenWidth > desktopBreakpoint)
-            Container(
-              width: 320,
-              decoration: BoxDecoration(
-                border: Border(left: BorderSide(color: Colors.grey[300]!)),
+                  // Input area at bottom
+                  _buildInputArea(),
+                ],
               ),
-              child: _buildRightSidebar(),
             ),
-        ],
+
+            // Right sidebar (desktop only)
+            if (screenWidth > desktopBreakpoint)
+              Container(
+                width: 320,
+                decoration: BoxDecoration(
+                  border: Border(left: BorderSide(color: Colors.grey[300]!)),
+                ),
+                child: _buildRightSidebar(),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -636,122 +725,168 @@ Do not include explanation.
     final isSmallMobile = screenWidth < 380;
 
     return SingleChildScrollView(
-      padding: EdgeInsets.all(isMobile ? 16 : 20),
+      padding: EdgeInsets.fromLTRB(25, isMobile ? 40 : 60, 25, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Welcome Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Flexible(
-                child: Text(
-                  _loadingProfile ? 'Welcome...' : 'Welcome $_userName',
-                  style: TextStyle(
-                    fontSize: isSmallMobile ? 22 : (isMobile ? 26 : 32),
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1B2347),
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              SizedBox(width: isSmallMobile ? 8 : 12),
-              Container(
-                width: isSmallMobile ? 36 : (isMobile ? 40 : 48),
-                height: isSmallMobile ? 36 : (isMobile ? 40 : 48),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Color(0xFF93C5FD),
-                      Color(0xFFFBBF24),
-                      Color(0xFFFCBED6),
-                    ],
-                  ),
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: isMobile ? 16 : 20),
-
-          // Subtitle
+          // Elegant Welcome Header
           Text(
-            'Lets get started with defining your career goals, and clearing your doubts. Tell me what you want to become.',
-            style: TextStyle(
-              fontSize: isSmallMobile ? 14 : 16,
-              color: Color(0xFF1B2347),
-              height: 1.5,
+            _loadingProfile ? 'Hello...' : 'Hello $_userName',
+            style: GoogleFonts.playfairDisplay(
+              fontSize: isMobile ? 32 : 42,
+              fontWeight: FontWeight.w500,
+              color: const Color(0xFFA594F9), // Soft Purple/Lavender
+              height: 0.9,
             ),
-            textAlign: TextAlign.center,
           ),
-          SizedBox(height: isMobile ? 30 : 40),
-
-          // Show suggestions or feature cards
-          if (_showSuggestions)
-            _buildCareerSuggestions()
-          else
-            _buildFeatureCards(),
+          const SizedBox(height: 5),
+          Text(
+            'How can i help\nyou today',
+            style: GoogleFonts.playfairDisplay(
+              fontSize: isMobile ? 38 : 48,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF1B2347),
+              height: 1.1,
+              letterSpacing: -1,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.only(right: 40),
+            child: Text(
+              'Explore professional career advice, skill development, and interview preparation with Reskill AI Coach.',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: Colors.grey[600],
+                height: 1.6,
+              ),
+            ),
+          ),
+          const SizedBox(height: 30),
+          
+          // Chatbot Animation
+          Center(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Image.asset(
+                'assets/chatbot.gif',
+                height: 350,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 10),
         ],
       ),
     );
   }
 
-  /// Feature cards displaying AI capabilities:
-  /// - Voice Assistant for interview prep
-  /// - Instant doubt clearing
-  /// - Real-time web search integration
-  Widget _buildFeatureCards() {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < mobileBreakpoint;
+  Widget _buildHorizontalHorizontalSuggestions() {
+    final List<Map<String, dynamic>> suggestions = [
+      {'title': 'Full Stack Developer', 'subtitle': 'Modern web apps', 'icon': Icons.code_rounded},
+      {'title': 'Data Science', 'subtitle': 'Big data insights', 'icon': Icons.analytics_outlined},
+      {'title': 'AI/ML Developer', 'subtitle': 'Intelligent systems', 'icon': Icons.psychology_outlined},
+      {'title': 'Software Engineer', 'subtitle': 'System architecture', 'icon': Icons.terminal_rounded},
+      {'title': 'Backend Developer', 'subtitle': 'Scalable APIs', 'icon': Icons.storage_rounded},
+      {'title': 'Frontend Developer', 'subtitle': 'UI/UX excellence', 'icon': Icons.web_asset_rounded},
+    ];
+
+    return SizedBox(
+      height: 70,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: suggestions.length,
+        itemBuilder: (context, index) {
+          final item = suggestions[index];
+          return GestureDetector(
+            onTap: () {
+              _searchController.text = "I want to start my career in ${item['title']}";
+            },
+            child: Container(
+              margin: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: const Color(0xFFF1F5F9)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.6),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(item['icon'], color: const Color(0xFF6741D9), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        item['title'],
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1B2347),
+                        ),
+                      ),
+                      Text(
+                        item['subtitle'],
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildFeatureCardsCompact() {
     return Wrap(
-      spacing: isMobile ? 12 : 16,
-      runSpacing: isMobile ? 12 : 16,
+      spacing: 12,
+      runSpacing: 12,
       children: [
-        _buildFeatureCard(
-          title: 'AI Voice Assistant',
-          description:
-              'Test your knowledge. AI Voice Assistant made for Interview Preparations.',
-          buttonText: 'Try Now',
-          icon: Icons.mic,
-          isDark: true,
-        ),
-        _buildFeatureCard(
-          title: 'Clear Every Doubt',
-          description:
-              'Ask questions freely and get simple, accurate explanations in seconds.',
-          icon: Icons.search,
-          isDark: false,
-        ),
-        _buildFeatureCard(
-          title: 'Live Web Search',
-          description: 'Always get real-time and latest, verified answers.',
-          icon: Icons.language,
-          isDark: false,
-        ),
+        _buildCompactTile('AI Voice Assist', Icons.mic),
+        _buildCompactTile('Web Search', Icons.language),
+        _buildCompactTile('Career Fit', Icons.assessment),
       ],
     );
   }
 
-  /// Grid of popular career paths for quick selection
-  /// Tapping a chip fills the search bar with the career name
-  Widget _buildCareerSuggestions() {
-    const suggestions = [
-      'Full Stack Developer',
-      'Data Science',
-      'AI/ML Developer',
-      'Software Engineer',
-      'Backend Developer',
-      'Frontend Developer',
-    ];
-
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      children: suggestions.map((suggestion) {
-        return _buildSuggestionChip(suggestion);
-      }).toList(),
+  Widget _buildCompactTile(String title, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: const Color(0xFF5E9EF5)),
+          const SizedBox(width: 8),
+          Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+        ],
+      ),
     );
   }
 
@@ -808,14 +943,14 @@ Do not include explanation.
           vertical: isSmallMobile ? 8 : (isMobile ? 10 : 12),
         ),
         decoration: BoxDecoration(
-          color: AppConstants.primaryBlue,
-          borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
+          color: const Color(0xFFEFE8FF),
+          borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
           message.text,
           style: TextStyle(
             fontSize: isMobile ? 13 : 14,
-            color: Colors.white,
+            color: AppConstants.darkBlue,
             height: 1.4,
           ),
         ),
@@ -847,8 +982,16 @@ Do not include explanation.
             ),
             padding: EdgeInsets.all(isSmallMobile ? 10 : (isMobile ? 12 : 16)),
             decoration: BoxDecoration(
-              color: AppConstants.lightBlue,
-              borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFF1F5F9)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.02),
+                  blurRadius: 5,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -997,162 +1140,155 @@ Do not include explanation.
     );
   }
 
-  /// Fixed bottom input bar with controls
-  /// Components: Clear/Suggestions toggle, search counter, text field, send button
-  /// Includes "Web" badge indicating real-time search capability
   Widget _buildInputArea() {
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmallMobile = screenWidth < smallMobileBreakpoint;
 
     return Container(
-      padding: EdgeInsets.all(isSmallMobile ? 12 : 16),
+      padding: EdgeInsets.fromLTRB(20, 10, 20, isSmallMobile ? 30 : 40),
       decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: Offset(0, -2),
-          ),
-        ],
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.white.withValues(alpha: 0), // Fade in from chat
+            const Color(0xFFF5F7FA).withValues(alpha: 0.8),
+            const Color(0xFFEFE8FF), // Faint theme lavender
+          ],
+          stops: const [0.0, 0.4, 1.0],
+        ),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Control buttons row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // Clear or Show Suggestions button
-              if (_messages.isEmpty)
-                TextButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _showSuggestions = !_showSuggestions;
-                    });
-                  },
-                  icon: Icon(
-                    _showSuggestions
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down,
-                    color: AppConstants.darkBlue,
-                  ),
-                  label: Text(
-                    _showSuggestions ? 'Hide Suggestions' : 'Show Suggestions',
-                    style: TextStyle(
-                      fontSize: isSmallMobile ? 12 : 14,
-                      color: AppConstants.darkBlue,
-                    ),
-                  ),
-                )
-              else
-                TextButton.icon(
-                  onPressed: _clearChat,
-                  icon: Icon(
-                    Icons.delete_outline,
-                    color: Colors.red,
-                    size: isSmallMobile ? 18 : 20,
-                  ),
-                  label: Text(
-                    'Clear Chat',
-                    style: TextStyle(
-                      fontSize: isSmallMobile ? 12 : 14,
-                      color: Colors.red,
-                    ),
-                  ),
-                ),
-
-              // Searches remaining
-              Text(
-                '$_searchesRemaining searches -',
+          // Suggested for you (Moved from welcome screen)
+          if (_messages.isEmpty) ...[
+            const Padding(
+              padding: EdgeInsets.only(left: 10, bottom: 12),
+              child: Text(
+                'Suggested for you',
                 style: TextStyle(
-                  fontSize: isSmallMobile ? 11 : 13,
-                  color: Colors.grey[600],
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1B2347),
+                  letterSpacing: 0.5,
                 ),
               ),
-            ],
-          ),
-          SizedBox(height: 12),
-
-          // Input field
-          Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: isSmallMobile ? 12 : 16,
-              vertical: 4,
             ),
+            _buildHorizontalHorizontalSuggestions(),
+            const SizedBox(height: 15),
+          ],
+
+          // Counter and Clear (Hide searches left as requested)
+          if (_messages.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  GestureDetector(
+                    onTap: _clearChat,
+                    child: Text('Clear', style: TextStyle(fontSize: 11, color: Colors.red[300])),
+                  ),
+                ],
+              ),
+            ),
+          
+          // The Pill Input
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey[300]!),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(40),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
             ),
             child: Row(
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    maxLines: 3,
-                    minLines: 1,
-                    decoration: InputDecoration(
-                      hintText: 'Ask me anything',
-                      border: InputBorder.none,
-                      hintStyle: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: isSmallMobile ? 13 : 15,
-                      ),
-                    ),
-                    style: TextStyle(fontSize: isSmallMobile ? 13 : 15),
-                    onSubmitted: (_) => _sendMessage(),
-                  ),
-                ),
-                SizedBox(width: 8),
-
-                // Web badge
-                if (!isSmallMobile)
-                  Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: isSmallMobile ? 8 : 12,
-                      vertical: isSmallMobile ? 4 : 6,
-                    ),
+                // Glowing Orb (Toggle Speak)
+                GestureDetector(
+                  onTap: _isListening ? _stopListening : _startListening,
+                  child: Container(
+                    width: 38,
+                    height: 38,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE3F2FD),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppConstants.primaryBlue),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.language,
-                          size: isSmallMobile ? 14 : 16,
-                          color: AppConstants.primaryBlue,
-                        ),
-                        SizedBox(width: 4),
-                        Text(
-                          'Web',
-                          style: TextStyle(
-                            fontSize: isSmallMobile ? 11 : 13,
-                            color: AppConstants.primaryBlue,
-                            fontWeight: FontWeight.w500,
-                          ),
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: _isListening 
+                          ? [const Color(0xFF6741D9), const Color(0xFFA594F9)]
+                          : [const Color(0xFFA594F9), const Color(0xFFEFE8FF)],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: (_isListening ? const Color(0xFF6741D9) : const Color(0xFFA594F9)).withValues(alpha: 0.3),
+                          blurRadius: _isListening ? 12 : 8,
+                          spreadRadius: _isListening ? 4 : 2,
                         ),
                       ],
                     ),
+                    child: Center(
+                      child: Icon(
+                        _isListening ? Icons.mic : Icons.auto_awesome, 
+                        color: Colors.white, 
+                        size: 16
+                      ),
+                    ),
                   ),
-                SizedBox(width: isSmallMobile ? 4 : 8),
-
-                // Send button
-                InkWell(
+                ),
+                const SizedBox(width: 12),
+                
+                // Text Field
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: _isListening ? 'Listening...' : 'Tap on AI to start speaking...',
+                      hintStyle: TextStyle(
+                        color: _isListening ? const Color(0xFF6741D9) : Colors.grey[400], 
+                        fontSize: 13, 
+                        fontWeight: FontWeight.w500
+                      ),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                    ),
+                    style: const TextStyle(fontSize: 14),
+                    onSubmitted: (_) {
+                      if (_isListening) _stopListening();
+                      _sendMessage();
+                    },
+                  ),
+                ),
+                
+                // Attachment/Paperclip
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: _pickFile,
+                    borderRadius: BorderRadius.circular(20),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Icon(Icons.attach_file_rounded, color: Colors.grey[400], size: 22),
+                    ),
+                  ),
+                ),
+                
+                // Send (Hidden in photo but functional)
+                const SizedBox(width: 4),
+                GestureDetector(
                   onTap: _aiLoading ? null : _sendMessage,
                   child: Container(
-                    padding: EdgeInsets.all(isSmallMobile ? 6 : 8),
+                    padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: _aiLoading ? Colors.grey : AppConstants.primaryBlue,
-                      borderRadius: BorderRadius.circular(AppConstants.borderRadiusSmall),
+                      color: const Color(0xFF6741D9),
+                      shape: BoxShape.circle,
                     ),
-                    child: Icon(
-                      Icons.send,
-                      color: Colors.white,
-                      size: isSmallMobile ? 18 : 20,
-                    ),
+                    child: const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 18),
                   ),
                 ),
               ],

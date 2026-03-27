@@ -599,10 +599,15 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: Color(0xFFF5F7FA),
+      backgroundColor: const Color(0xFFF5F7FA),
       drawer: Drawer(child: _buildSidebar()),
-      body: getBodyContent(),
-      bottomNavigationBar: _buildBottomNavigationBar(),
+      body: SafeArea(
+        top: false, // Top bar has its own padding
+        child: getBodyContent(),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: _buildBottomNavigationBar(),
+      ),
     );
   }
 
@@ -1392,14 +1397,14 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 10),
                 ElevatedButton(
                   onPressed: onTap,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF4A90E2),
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     elevation: 0,
                   ),
                   child: Row(
@@ -1453,6 +1458,13 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -1624,10 +1636,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 child: Text(
                   'Welcome, $_userName',
                   style: GoogleFonts.inter(
-                    fontSize: 22,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: const Color(0xFF1B2347),
-                    letterSpacing: -0.5,
+                    letterSpacing: -0.4,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1660,7 +1672,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 )
               else
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(12),
@@ -1668,7 +1680,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   ),
                   child: Text(
                     'Career: $_userFocus',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
                   ),
                 ),
             ],
@@ -1819,38 +1831,6 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   const Icon(Icons.group, color: Color(0xFF5E9EF5), size: 24),
                 ],
               ),
-              OutlinedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const MentorConnectPage(),
-                    ),
-                  );
-                },
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF5E9EF5),
-                  side: BorderSide(color: Colors.grey[200]!, width: 1.5),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'More',
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Icon(Icons.arrow_forward, size: 14),
-                  ],
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -1865,8 +1845,11 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   )
                 : ListView.builder(
                     scrollDirection: Axis.horizontal,
-                    itemCount: mentors.length,
+                    itemCount: mentors.length + 1,
                     itemBuilder: (context, index) {
+                      if (index == mentors.length) {
+                        return _buildViewMoreMentorCard();
+                      }
                       return _buildMentorCard(mentors[index]);
                     },
                   ),
@@ -1875,6 +1858,66 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       );
     }
 
+
+  Widget _buildViewMoreMentorCard() {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const MentorConnectPage(),
+          ),
+        );
+      },
+      child: Container(
+        width: 160,
+        margin: const EdgeInsets.only(right: 16, bottom: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: const Color(0xFF5E9EF5).withOpacity(0.1)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: const BoxDecoration(
+                color: Color(0xFF5E9EF5),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 24),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'View More',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF1B2347),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Find full list',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _buildMentorCard(Map<String, dynamic> mentor) {
     // Solid soft colors for headers
@@ -2068,7 +2111,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return Column(
       children: [
         SizedBox(
-          height: 170,
+          height: 180,
           child: PageView(
             controller: _careerBannerController,
             onPageChanged: (index) {
@@ -2228,7 +2271,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                           height: 1.3,
                         ),
                       ),
-                      SizedBox(height: 12),
+                      const SizedBox(height: 8),
                       Row(
                         children: buttons.map((btn) {
                           return Expanded(
@@ -2249,9 +2292,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: buttonColor,
                                   foregroundColor: buttonTextColor,
-                                  padding: EdgeInsets.symmetric(
+                                  padding: const EdgeInsets.symmetric(
                                     horizontal: 6,
-                                    vertical: 8,
+                                    vertical: 5,
                                   ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(5),

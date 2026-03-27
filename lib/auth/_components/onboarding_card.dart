@@ -92,7 +92,12 @@ class _OnBoardingCardState extends State<OnBoardingCard> {
   bool loading = false;
   bool isEmailProvider = false;
   String? referralLink;
-
+  
+  // Date of birth selection parts
+  String? _selectedDay;
+  String? _selectedMonth;
+  String? _selectedYear;
+  
   late FormData data;
 
   final Map<Profession, List<String>> focusByProfession = {
@@ -154,7 +159,7 @@ class _OnBoardingCardState extends State<OnBoardingCard> {
     if (busy) return false;
     switch (step) {
       case 1:
-        return RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(data.dob) &&
+        return RegExp(r'^\d{2}/\d{2}/\d{4}$').hasMatch(data.dob) &&
             RegExp(r'^[0-9()+\-\s]{7,}$').hasMatch(data.phone.trim()) &&
             data.institution.trim().length >= 5;
       case 2:
@@ -223,6 +228,23 @@ class _OnBoardingCardState extends State<OnBoardingCard> {
       if (mounted) {
         setState(() => loading = false);
       }
+    }
+  }
+
+  void _updateDOB() {
+    if (_selectedDay != null && _selectedMonth != null && _selectedYear != null) {
+      final months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      final monthIndex = months.indexOf(_selectedMonth!) + 1;
+      final monthStr = monthIndex.toString().padLeft(2, '0');
+      final dayStr = _selectedDay!.padLeft(2, '0');
+      final yearStr = _selectedYear!;
+      
+      setState(() {
+        data = data.copyWith(dob: '$dayStr/$monthStr/$yearStr');
+      });
     }
   }
 
@@ -362,42 +384,115 @@ class _OnBoardingCardState extends State<OnBoardingCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Full Name
         if (isEmailProvider) ...[
+          const Text(
+            'Full name',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+          ),
+          const SizedBox(height: 8),
           TextFormField(
-            decoration: const InputDecoration(
-              labelText: 'Full name',
-              hintText: 'e.g., John Doe',
+            decoration: InputDecoration(
+              hintText: 'John Doe',
+              filled: true,
+              fillColor: const Color(0xFFF1F5F9).withValues(alpha: 0.5),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
-            onChanged: (value) =>
-                setState(() => data = data.copyWith(name: value)),
+            onChanged: (value) => setState(() => data = data.copyWith(name: value)),
           ),
           const SizedBox(height: 16),
         ],
+
+        // Phone number below name
+        const Text(
+          'Phone number',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+        ),
+        const SizedBox(height: 8),
         TextFormField(
-          decoration: const InputDecoration(
-            labelText: 'Date of birth',
-            hintText: 'YYYY-MM-DD',
+          keyboardType: TextInputType.phone,
+          decoration: InputDecoration(
+            hintText: '+91 90005...',
+            filled: true,
+            fillColor: const Color(0xFFF1F5F9).withValues(alpha: 0.5),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           ),
-          onChanged: (value) =>
-              setState(() => data = data.copyWith(dob: value)),
+          onChanged: (value) => setState(() => data = data.copyWith(phone: value)),
         ),
         const SizedBox(height: 16),
-        TextFormField(
-          decoration: const InputDecoration(
-            labelText: 'Phone number',
-            hintText: '+91 90005 xxxxx',
-          ),
-          onChanged: (value) =>
-              setState(() => data = data.copyWith(phone: value)),
+        
+        // DOB Label
+        const Text(
+          'Date of birth',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+        ),
+        const SizedBox(height: 8),
+        
+        // DOB selects in 3 columns
+        Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: _buildDOBDropdown(
+                hint: 'Date',
+                value: _selectedDay,
+                items: List.generate(31, (i) => (i + 1).toString()),
+                onChanged: (val) {
+                  setState(() => _selectedDay = val);
+                  _updateDOB();
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 4,
+              child: _buildDOBDropdown(
+                hint: 'Month',
+                value: _selectedMonth,
+                items: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                onChanged: (val) {
+                  setState(() => _selectedMonth = val);
+                  _updateDOB();
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 3,
+              child: _buildDOBDropdown(
+                hint: 'Year',
+                value: _selectedYear,
+                items: List.generate(100, (i) => (DateTime.now().year - i).toString()),
+                onChanged: (val) {
+                  setState(() => _selectedYear = val);
+                  _updateDOB();
+                },
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 16),
+        
+        // School/College
+        const Text(
+          'Current school/college',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+        ),
+        const SizedBox(height: 8),
         TextFormField(
-          decoration: const InputDecoration(
-            labelText: 'Current school/college',
+          decoration: InputDecoration(
             hintText: 'e.g., Delhi Public School',
+            filled: true,
+            fillColor: const Color(0xFFF1F5F9).withValues(alpha: 0.5),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           ),
-          onChanged: (value) =>
-              setState(() => data = data.copyWith(institution: value)),
+          onChanged: (value) => setState(() => data = data.copyWith(institution: value)),
         ),
         const SizedBox(height: 8),
         Text(
@@ -746,6 +841,36 @@ class _OnBoardingCardState extends State<OnBoardingCard> {
           style: TextStyle(color: Colors.grey[600], fontSize: 12),
         ),
       ],
+    );
+  }
+  Widget _buildDOBDropdown({
+    required String hint,
+    required String? value,
+    required List<String> items,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          hint: Text(hint, style: const TextStyle(fontSize: 14, color: Colors.grey)),
+          isExpanded: true,
+          icon: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF64748B), size: 18),
+          items: items.map((String item) {
+            return DropdownMenuItem<String>(
+              value: item,
+              child: Text(item, style: const TextStyle(fontSize: 14, color: Color(0xFF1E293B))),
+            );
+          }).toList(),
+          onChanged: onChanged,
+        ),
+      ),
     );
   }
 }

@@ -6,7 +6,7 @@
     <application
         android:label="Reskill"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@drawable/image">
         <activity
             android:name=".MainActivity"
             android:exported="true"

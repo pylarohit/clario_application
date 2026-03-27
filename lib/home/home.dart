@@ -553,43 +553,35 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         case 3: // Profile Tab (placeholder)
           return _buildProfilePage();
         default: // Home Tab (case 0)
-          return Column(
-            children: [
-              _buildTopSearchBar(),
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: _refreshData,
-                  color: Color(0xFF5E9EF5),
-                  child: SingleChildScrollView(
-                    physics: AlwaysScrollableScrollPhysics(),
+          return RefreshIndicator(
+            onRefresh: _refreshData,
+            color: Color(0xFF5E9EF5),
+            child: SingleChildScrollView(
+              physics: AlwaysScrollableScrollPhysics(),
+              child: Column(
+                children: [
+                  _buildTopSearchBar(),
+                  SizedBox(height: 16),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12),
                     child: Column(
                       children: [
-                        SizedBox(height: 12),
-                        _buildHeroBanner(),
+                        _buildWelcomeSection(),
                         SizedBox(height: 16),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 12),
-                          child: Column(
-                            children: [
-                              _buildWelcomeSection(),
-                              SizedBox(height: 16),
-                              _buildAIToolsCards(),
-                              SizedBox(height: 16),
-                              _buildRecommendedMentors(),
-                              SizedBox(height: 20),
-                              _buildCareerBanners(),
-                              SizedBox(height: 20),
-                              _buildDiscoverColleges(),
-                              SizedBox(height: 80), // Extra space for bottom nav
-                            ],
-                          ),
-                        ),
+                        _buildAIToolsCards(),
+                        SizedBox(height: 16),
+                        _buildRecommendedMentors(),
+                        SizedBox(height: 20),
+                        _buildCareerBanners(),
+                        SizedBox(height: 20),
+                        _buildDiscoverColleges(),
+                        SizedBox(height: 80), // Extra space for bottom nav
                       ],
                     ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           );
       }
     }
@@ -1164,269 +1156,204 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   // ============================================================================
   // TOP BAR - Search Bar with Hamburger Menu
-  // ============================================================================
-
-  /// Build the top search bar with menu button and search functionality
+  // ========================================================================  /// Build the new premium teal header from the design
   Widget _buildTopSearchBar() {
     return Container(
-      padding: EdgeInsets.fromLTRB(20, 45, 20, 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
+      decoration: const BoxDecoration(
+        color: Color(0xFF064D44), // Main Teal Color
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(32),
+          bottomRight: Radius.circular(32),
+        ),
       ),
-      child: Row(
+      padding: EdgeInsets.fromLTRB(20, 50, 20, 24),
+      child: Column(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Color(0xFF5E9EF5).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: IconButton(
-              icon: Icon(
-                Icons.menu_rounded,
-                color: Color(0xFF5E9EF5),
-                size: 22,
+          // Unified Top Bar: Menu, Brand, Search, and Profile
+          Row(
+            children: [
+              // Menu Toggle
+              GestureDetector(
+                onTap: () => _scaffoldKey.currentState?.openDrawer(),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.menu_rounded, color: Colors.white, size: 24),
+                ),
               ),
-              onPressed: () {
-                _scaffoldKey.currentState?.openDrawer();
-              },
-              padding: EdgeInsets.zero,
-              constraints: BoxConstraints(),
-            ),
-          ),
-          SizedBox(width: 12),
-          Expanded(
-            child: Container(
-              height: 42,
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: Color(0xFFF8F9FA),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey[200]!, width: 1),
+              const SizedBox(width: 12),
+              // Brand Name
+              const Text(
+                'ReSkill',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.5,
+                ),
               ),
-              child: Row(
+              const Spacer(),
+              // Notification and Profile
+              Row(
                 children: [
-                  Icon(Icons.search, color: Colors.grey[500], size: 20),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Search mentors......',
-                        border: InputBorder.none,
-                        hintStyle: TextStyle(
-                          color: Colors.grey[400],
-                          fontSize: 14,
-                          fontWeight: FontWeight.w400,
+                  Stack(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        contentPadding: EdgeInsets.zero,
+                        child: const Icon(Icons.notifications_outlined, color: Colors.white, size: 22),
                       ),
-                      style: TextStyle(fontSize: 14),
-                    ),
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(color: Color(0xFFFF5252), shape: BoxShape.circle),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: _userPhotoUrl != null 
+                        ? Image.network(_userPhotoUrl!, width: 36, height: 36, fit: BoxFit.cover)
+                        : Container(
+                            width: 36,
+                            height: 36,
+                            color: Colors.white24,
+                            child: Center(child: Text(_userInitial, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                          ),
                   ),
                 ],
               ),
-            ),
+            ],
           ),
-          SizedBox(width: 12),
+          const SizedBox(height: 20),
+          // Search Field in its own row below ReSkill
           Container(
-            width: 40,
-            height: 40,
+            height: 48,
             decoration: BoxDecoration(
-              color: Color(0xFFF8F9FA),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.grey[200]!),
+              color: Colors.white.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Stack(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
               children: [
-                Center(
-                  child: Icon(
-                    Icons.notifications_outlined,
-                    color: Color(0xFF1B2347),
-                    size: 20,
-                  ),
-                ),
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: Color(0xFFFF6B9D),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 1.5),
+                Icon(Icons.search, color: Colors.white.withOpacity(0.5), size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: 'Search mentors...',
+                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 13),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.only(bottom: 2),
                     ),
                   ),
                 ),
               ],
             ),
           ),
-          SizedBox(width: 12),
-          GestureDetector(
-            onTap: () {
-              setState(() {
-                _bottomNavIndex = 3; // Navigate to Profile tab
-              });
-            },
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                gradient: _userPhotoUrl == null
-                    ? LinearGradient(
-                        colors: [Color(0xFF5E9EF5), Color(0xFF4A7FD6)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      )
-                    : null,
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(
-                    color: Color(0xFF5E9EF5).withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: Offset(0, 2),
-                  ),
-                ],
+          const SizedBox(height: 28),
+          // Row 3: Banner Placeholder
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.white.withOpacity(0.15), Colors.white.withOpacity(0.05)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              child: _userPhotoUrl != null
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.network(
-                        _userPhotoUrl!,
-                        width: 40,
-                        height: 40,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Center(
-                            child: Text(
-                              _userInitial,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    )
-                  : Center(
-                      child: Text(
-                        _userInitial,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white.withOpacity(0.1)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'FIND YOUR DREAM JOB',
                         style: TextStyle(
                           color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.5,
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Discover opportunities that match your career goals.',
+                        style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13),
+                      ),
+                      const SizedBox(height: 20),
+                      ElevatedButton(
+                        onPressed: () {
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const CareerBoardPage()));
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF4A90E2),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('Explore Jobs'),
+                            const SizedBox(width: 8),
+                            const Icon(Icons.arrow_forward, size: 16),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Image.asset(
+                    'assets/element5.png', // Fallback to existing asset
+                    height: 100,
+                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.auto_awesome, color: Colors.white38, size: 80),
+                  ),
+                ),
+              ],
             ),
+          ),
+          const SizedBox(height: 16),
+          // Page Indicator
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(4, (index) => Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: index == 0 ? Colors.white : Colors.white24,
+              ),
+            )),
           ),
         ],
       ),
     );
   }
 
-  // ============================================================================
-  // HERO BANNER - Carousel Section
-  // ============================================================================
-
-  /// Build the hero banner carousel with auto-scrolling cards
+  /// The hero banner is now integrated into the header for this design
   Widget _buildHeroBanner() {
-    return Column(
-      children: [
-        Container(
-          margin: EdgeInsets.symmetric(horizontal: 12),
-          height: MediaQuery.of(context).size.height * 0.27,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Color(0xFF5E9EF5).withValues(alpha: 0.3),
-                blurRadius: 30,
-                offset: Offset(0, 15),
-              ),
-            ],
-          ),
-          child: PageView(
-            controller: _pageController,
-            onPageChanged: (index) {
-              setState(() {
-                _currentCarouselIndex = index;
-              });
-            },
-            children: [
-              _buildBannerPage(
-                gradient: [Color(0xFFE8F5FF), Color(0xFFF5FBFF)],
-                title: 'Manage All Your Bookings Here',
-                subtitle:
-                    'Manage all your bookings and get insights on your progress.',
-                imagePath: 'assets/element5.png',
-                buttonColor: Color(0xFF5E9EF5),
-                buttonText: 'View them',
-                buttonIcon: Icons.visibility,
-              ),
-              _buildBannerPage(
-                gradient: [Color(0xFFD4E4F7), Color(0xFFD4E4F7)],
-                title: 'Find Your Dream Job Here',
-                subtitle:
-                    'Discover thousands of opportunities that match your skills and aspirations.',
-                imagePath: 'assets/prep2.png',
-                buttonColor: Color(0xFF7CB4F7),
-                buttonText: 'Get Started',
-                buttonIcon: Icons.arrow_forward,
-              ),
-              _buildBannerPage(
-                gradient: [Color(0xFFFFF4CC), Color(0xFFFFF4CC)],
-                title: 'Build Your Career Path',
-                subtitle:
-                    'Take control of your professional future with our comprehensive career-building tools.',
-                imagePath: 'assets/element8.png',
-                buttonColor: Color(0xFFFFD54F),
-                buttonText: 'Get Started',
-                buttonIcon: Icons.arrow_forward,
-              ),
-              _buildBannerPage(
-                gradient: [Color(0xFFFFCDD2), Color(0xFFFFCDD2)],
-                title: 'Turn Passion Into Profession',
-                subtitle:
-                    'Transform what you love into a successful career. Get guidance, resources, and opportunities.',
-                imagePath: 'assets/element2.png',
-                buttonColor: Color(0xFFFF8A95),
-                buttonText: 'Get Started',
-                buttonIcon: Icons.arrow_forward,
-              ),
-            ],
-          ),
-        ),
-        SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(
-            4,
-            (index) => Container(
-              margin: EdgeInsets.symmetric(horizontal: 4),
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: _currentCarouselIndex == index
-                    ? Color(0xFF5E9EF5)
-                    : Colors.grey[300],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
+    return const SizedBox.shrink();
   }
 
   /// Build individual banner page for the hero carousel
@@ -1607,297 +1534,180 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // ============================================================================
 
   /// Build the welcome section with user greeting
+  /// Build the welcome greeting section for the user with dynamic action buttons
   Widget _buildWelcomeSection() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(
-          flex: 2,
-          child: Text(
-            'Welcome, $_userName',
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  'Welcome, $_userName',
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B),
+                    letterSpacing: -0.5,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Restored Functionality Buttons
+              if (!_isQuizDone)
+                _buildActionButton(
+                  'Quiz',
+                  Icons.bolt,
+                  const Color(0xFF5E9EF5),
+                  () => QuizStartDialog.show(
+                    context,
+                    currentStatus: _userStatus,
+                    mainFocus: _userFocus,
+                    userName: _userName,
+                    userId: _userId,
+                    userAvatar: null,
+                  ),
+                )
+              else if (_userFocus.toLowerCase() == 'choose career paths' || _userFocus.isEmpty)
+                _buildActionButton(
+                  'Plan Career',
+                  Icons.auto_awesome,
+                  const Color(0xFF5E9EF5),
+                  () async {
+                    await Navigator.push(context, MaterialPageRoute(builder: (context) => const CareerCoachPage()));
+                    _refreshData();
+                  },
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF5E9EF5).withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    'Career: $_userFocus',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'AI Tools & Resources',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF1B2347),
-            ),
-            overflow: TextOverflow.visible,
-            maxLines: 1,
-          ),
-        ),
-        SizedBox(width: 12),
-        // Step 1: Show Quiz button if quiz not done
-        if (!_isQuizDone)
-          ElevatedButton.icon(
-            onPressed: () {
-              QuizStartDialog.show(
-                context,
-                currentStatus: _userStatus,
-                mainFocus: _userFocus,
-                userName: _userName,
-                userId: _userId,
-                userAvatar: null,
-              );
-            },
-            icon: Icon(Icons.bolt, size: 24),
-            label: Text('Quiz', style: TextStyle(fontSize: 14)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Color(0xFF5E9EF5),
-              foregroundColor: Colors.white,
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              minimumSize: Size(100, 40),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
+              color: Color(0xFF1E293B),
             ),
           ),
-
-        // Step 2: Show Plan button if quiz done but no career chosen
-        if (_isQuizDone &&
-            (_userFocus.toLowerCase() == 'choose career paths' ||
-                _userFocus.isEmpty))
-          ElevatedButton.icon(
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => CareerCoachPage()),
-              );
-              // Refresh data when returning from Career Coach
-              _refreshData();
-            },
-            label: Text('Plan your Career', style: TextStyle(fontSize: 14)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Color(0xFF5E9EF5),
-              foregroundColor: Colors.white,
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              minimumSize: Size(140, 40),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          ),
-
-        // Step 3: Show career card if quiz done AND career chosen (not default)
-        if (_isQuizDone &&
-            _userFocus.isNotEmpty &&
-            _userFocus.toLowerCase() != 'choose career paths')
-          Container(
-            height: 40,
-            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            decoration: BoxDecoration(
-              color: Color(0xFFF5F7FA),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: Color(0xFF5E9EF5).withValues(alpha: 0.3),
-                width: 1,
-              ),
-            ),
-            child: Center(
-              child: Text(
-                'Career: $_userFocus',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1B2347),
-                ),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 
+  Widget _buildActionButton(String label, IconData icon, Color color, VoidCallback onTap) {
+    return ElevatedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 18),
+      label: Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  /// Build a 2x2 grid of AI tools cards
   Widget _buildAIToolsCards() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        GestureDetector(
-          onTap: () {
-            setState(() {
-              _isQuickActionsExpanded = !_isQuickActionsExpanded;
-            });
-          },
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Quick Actions',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1B2347),
-                ),
-              ),
-              Icon(
-                _isQuickActionsExpanded
-                    ? Icons.keyboard_arrow_up
-                    : Icons.keyboard_arrow_down,
-                color: Color(0xFF5E9EF5),
-                size: 28,
-              ),
-            ],
-          ),
-        ),
-        SizedBox(height: 16),
-        // First Row - Always visible
         Row(
           children: [
             Expanded(
-              child: _buildAIToolCard(
-                icon: Icons.school,
-                title: 'AI Career Coach',
-                description:
-                    'Unlock your potential with AI-guided career wisdom.',
-                color: Color(0xFF5E9EF5),
-                borderColor: Color(0xFF5E9EF5),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => CareerCoachPage()),
-                  );
-                },
+              child: _buildToolCard(
+                'AI Career Coach',
+                Icons.school_outlined,
+                const Color(0xFFE0F2F1),
+                const Color(0xFF00796B),
+                () => Navigator.push(context, MaterialPageRoute(builder: (context) => const CareerCoachPage())),
               ),
             ),
-            SizedBox(width: 16),
+            const SizedBox(width: 12),
             Expanded(
-              child: _buildAIToolCard(
-                icon: Icons.map,
-                title: 'AI Roadmap Maker',
-                description:
-                    'Chart your journey with a clear, personalized path..',
-                color: Color(0xFFFFA726),
-                borderColor: Color(0xFFFFA726),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => RoadmapPage()),
-                  );
-                },
+              child: _buildToolCard(
+                'AI Roadmap Maker',
+                Icons.map_outlined,
+                const Color(0xFFE8EAF6),
+                const Color(0xFF3F51B5),
+                () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RoadmapPage())),
               ),
             ),
           ],
         ),
-        // Expandable Rows
-        if (_isQuickActionsExpanded) ...[
-          SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildAIToolCard(
-                  icon: Icons.people,
-                  title: 'Connect Mentors',
-                  description:
-                      'Learn from mentors who\'ve walked the path before you.',
-                  color: Color(0xFFE91E63),
-                  borderColor: Color(0xFFE91E63),
-                ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildToolCard(
+                'Interview Prep',
+                Icons.assignment_outlined,
+                const Color(0xFFFFF3E0),
+                const Color(0xFFE65100),
+                () {},
               ),
-              SizedBox(width: 16),
-              Expanded(
-                child: _buildAIToolCard(
-                  icon: Icons.video_call,
-                  title: 'Interview Prep',
-                  description: 'Prepare for interviews with confidence.',
-                  color: Color(0xFFFF9800),
-                  borderColor: Color(0xFFFF9800),
-                ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildToolCard(
+                'AI Skill Paths',
+                Icons.menu_book_outlined,
+                const Color(0xFFE1F5FE),
+                const Color(0xFF0277BD),
+                () {},
               ),
-            ],
-          ),
-          SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildAIToolCard(
-                  icon: Icons.dashboard,
-                  title: 'Career Board',
-                  description:
-                      'Get Latest Industry insights, resources and opportunities',
-                  color: Color(0xFF4CAF50),
-                  borderColor: Color(0xFF4CAF50),
-                ),
-              ),
-              SizedBox(width: 16),
-              Expanded(
-                child: _buildAIToolCard(
-                  icon: Icons.description,
-                  title: 'AI Resume Maker',
-                  description:
-                      'Transform your resume into a recruiter-ready story.',
-                  color: Color(0xFF9C27B0),
-                  borderColor: Color(0xFF9C27B0),
-                ),
-              ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ],
     );
   }
 
-  Widget _buildAIToolCard({
-    required IconData icon,
-    required String title,
-    required String description,
-    required Color color,
-    required Color borderColor,
-    VoidCallback? onTap,
-  }) {
+  Widget _buildToolCard(String title, IconData icon, Color bgColor, Color iconColor, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        constraints: BoxConstraints(minHeight: 80),
-        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        height: 80,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border(left: BorderSide(color: borderColor, width: 4)),
+          borderRadius: BorderRadius.circular(20),
           boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: Offset(0, 3),
-            ),
+            BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
           ],
         ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Container(
-              padding: EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, color: color, size: 20),
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(12)),
+              child: Icon(icon, color: iconColor, size: 24),
             ),
-            SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1B2347),
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    description,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.grey[600],
-                      height: 1.3,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+              child: Text(
+                title,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B)),
+                maxLines: 2,
               ),
             ),
           ],
@@ -2445,54 +2255,82 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // ============================================================================
 
   /// Build the bottom navigation bar with Home, Calendar, Chat, Profile tabs
+  /// Build the bottom navigation bar with customized styling
   Widget _buildBottomNavigationBar() {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(36),
+          topRight: Radius.circular(36),
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 10,
-            offset: Offset(0, -2),
+            blurRadius: 20,
+            offset: const Offset(0, -5),
           ),
         ],
       ),
-      child: BottomNavigationBar(
-        currentIndex: _bottomNavIndex,
-        onTap: (index) {
-          setState(() {
-            _bottomNavIndex = index;
-          });
-
-          // Refresh data when switching back to home tab
-          if (index == 0) {
-            _refreshData();
-          }
-        },
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.white,
-        selectedItemColor: Color(0xFF5E9EF5),
-        unselectedItemColor: Colors.grey[600],
-        selectedFontSize: 12,
-        unselectedFontSize: 12,
-        elevation: 0,
-        items: [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_today),
-            label: 'Calendar',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline),
-            label: 'Chat',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            label: 'Profile',
-          ),
-        ],
+      child: ClipRRect(
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(36),
+          topRight: Radius.circular(36),
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _bottomNavIndex,
+          onTap: (index) {
+            setState(() {
+              _bottomNavIndex = index;
+            });
+            // Refresh data when switching back to home tab (index 0)
+            if (index == 0) {
+              _refreshData();
+            }
+          },
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Colors.white,
+          selectedItemColor: const Color(0xFF064D44),
+          unselectedItemColor: Colors.grey[400],
+          selectedFontSize: 12,
+          unselectedFontSize: 12,
+          elevation: 0,
+          items: [
+            BottomNavigationBarItem(
+              icon: _buildNavIcon(Icons.home_filled, 0),
+              label: 'Home',
+            ),
+            BottomNavigationBarItem(
+              icon: _buildNavIcon(Icons.calendar_month, 1),
+              label: 'Calendar',
+            ),
+            BottomNavigationBarItem(
+              icon: _buildNavIcon(Icons.chat_bubble_outline, 2),
+              label: 'Chat',
+            ),
+            BottomNavigationBarItem(
+              icon: _buildNavIcon(Icons.person_outline, 3),
+              label: 'Profile',
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  Widget _buildNavIcon(IconData icon, int index) {
+    bool isSelected = _bottomNavIndex == index;
+    if (isSelected) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF034D41),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Icon(icon, color: Colors.white, size: 24),
+      );
+    }
+    return Icon(icon, size: 24);
   }
 
   // ============================================================================

@@ -211,7 +211,15 @@ class _LoginPageState extends State<LoginPage>
           password: passwordController.text,
         );
         debugPrint('✅ Login response: session=${response.session != null}');
-        if (response.session != null) {
+        if (response.session != null && response.user != null) {
+          // Role check - only students allowed here
+          if (response.user!.userMetadata?['role'] == 'mentor') {
+            await Supabase.instance.client.auth.signOut();
+            if (mounted) {
+              setState(() => error = 'This is a Mentor Account, please Login from the Mentor Page.');
+            }
+            return;
+          }
           debugPrint('🚀 Login successful - AuthGate will handle routing');
         }
       }

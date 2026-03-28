@@ -6,6 +6,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth/login.dart';
 import 'auth/onboarding.dart';
 import 'home/home.dart';
+import 'mentor/dashboard.dart';
+import 'auth-mentor/mentor_login.dart';
+import 'auth-mentor/mentor_onboarding.dart';
 import 'package:app_links/app_links.dart';
 
 void main() async {
@@ -70,6 +73,7 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> {
   bool _loading = true;
   bool _hasProfile = false;
+  bool _isMentor = false;
   bool _isChecking = false;
   late final StreamSubscription<AuthState> _authSubscription;
 
@@ -138,13 +142,60 @@ class _AuthGateState extends State<AuthGate> {
     final user = Supabase.instance.client.auth.currentUser;
     debugPrint('🔍 Initial check - User exists: ${user != null}');
     if (user != null) {
-      debugPrint('🔍 Calling initial _checkUserProfile()...');
-      await _checkUserProfile();
+      // Check if user is a mentor from metadata
+      if (user.userMetadata?['role'] == 'mentor') {
+        debugPrint('👨‍🏫 User identified as mentor, checking mentor profile...');
+        if (mounted) {
+          setState(() {
+            _isMentor = true;
+          });
+        }
+        await _checkMentorProfile();
+      } else {
+        debugPrint('🔍 Calling initial _checkUserProfile()...');
+        if (mounted) {
+          setState(() {
+            _isMentor = false;
+          });
+        }
+        await _checkUserProfile();
+      }
     } else {
       // No user logged in, stop loading
       debugPrint('ℹ️ No user logged in initially');
       if (mounted) {
         setState(() {
+          _loading = false;
+          _isChecking = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _checkMentorProfile() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    try {
+      debugPrint('🔍 Checking mentor profile for: ${user.id}');
+      final response = await Supabase.instance.client
+          .from('mentors')
+          .select()
+          .eq('id', user.id)
+          .maybeSingle();
+
+      if (mounted) {
+        setState(() {
+          _hasProfile = response != null;
+          _loading = false;
+          _isChecking = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('❌ Error checking mentor profile: $e');
+      if (mounted) {
+        setState(() {
+          _hasProfile = false;
           _loading = false;
           _isChecking = false;
         });
@@ -329,12 +380,22 @@ class _AuthGateState extends State<AuthGate> {
 
     // Logged in but hasn't completed onboarding -> Show Onboarding
     if (!_hasProfile) {
+      if (_isMentor) {
+        debugPrint('➡️ Routing to MentorOnboardingPage');
+        // Import check: we need to import mentor onboarding and dashboard
+        return const MentorOnboardingPage();
+      }
       debugPrint('➡️ Routing to OnboardingPage (first time user)');
       return const OnboardingPage();
     }
 
-    // Logged in and completed onboarding -> Show Home Dashboard
+    // Logged in and completed onboarding -> Show Dashboard
+    if (_isMentor) {
+      debugPrint('➡️ Routing to MentorDashboard');
+      return const MentorDashboard();
+    }
+    
     debugPrint('➡️ Routing to HomePage (returning user)');
-    return HomePage();
+    return const HomePage();
   }
 }

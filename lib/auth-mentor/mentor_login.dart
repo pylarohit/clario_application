@@ -152,6 +152,14 @@ class _MentorLoginPageState extends State<MentorLoginPage>
         );
 
         if (response.session != null && response.user != null) {
+          // Role check - only mentors allowed here
+          if (response.user!.userMetadata?['role'] != 'mentor') {
+            await Supabase.instance.client.auth.signOut();
+            if (mounted) {
+              setState(() => error = 'This is a student account. Please login from the student portal.');
+            }
+            return;
+          }
           await _checkProfileAndNavigate(response.user!.id);
         }
       }
@@ -262,43 +270,6 @@ class _MentorLoginPageState extends State<MentorLoginPage>
                     ),
                     const SizedBox(height: 28),
 
-                    // Name field only during signup
-                    if (isSignup) ...[
-                      _buildTextField(
-                        controller: nameController,
-                        hint: 'Enter full name',
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-
-                    _buildTextField(
-                      controller: emailController,
-                      hint: 'Enter work email',
-                      keyboardType: TextInputType.emailAddress,
-                    ),
-                    const SizedBox(height: 16),
-
-                    _buildTextField(
-                      controller: passwordController,
-                      hint: isSignup ? 'Create password' : 'Password',
-                      obscureText: _obscurePassword,
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_off_outlined
-                              : Icons.visibility_outlined,
-                          color: Colors.grey[400],
-                          size: 20,
-                        ),
-                        onPressed: () =>
-                            setState(() => _obscurePassword = !_obscurePassword),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    _buildGradientButton(),
-                    const SizedBox(height: 28),
-
                     // Social Login Divider
                     Row(
                       children: [
@@ -337,6 +308,43 @@ class _MentorLoginPageState extends State<MentorLoginPage>
                       ],
                     ),
                     const SizedBox(height: 32),
+
+                    // Name field only during signup
+                    if (isSignup) ...[
+                      _buildTextField(
+                        controller: nameController,
+                        hint: 'Enter full name',
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    _buildTextField(
+                      controller: emailController,
+                      hint: 'Enter work email',
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 16),
+
+                    _buildTextField(
+                      controller: passwordController,
+                      hint: isSignup ? 'Create password' : 'Password',
+                      obscureText: _obscurePassword,
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                          color: Colors.grey[400],
+                          size: 20,
+                        ),
+                        onPressed: () =>
+                            setState(() => _obscurePassword = !_obscurePassword),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    _buildGradientButton(),
+                    const SizedBox(height: 28),
 
                     // Toggle Login / Signup
                     Center(

@@ -107,10 +107,15 @@ class _AuthGateState extends State<AuthGate> {
           });
         }
         
-        // Check profile after small delay
-        await Future.delayed(Duration(milliseconds: 300));
+        // Check profile and role after sign-in
+        await Future.delayed(const Duration(milliseconds: 300));
         if (mounted) {
-          await _checkUserProfile();
+          await _checkAuth(); // Call _checkAuth instead to verify role AND profile
+        }
+      } else if (data.event == AuthChangeEvent.initialSession) {
+        debugPrint('🔐 Initial session check...');
+        if (mounted) {
+          await _checkAuth();
         }
       } else if (data.event == AuthChangeEvent.signedOut) {
         debugPrint('👋 User signed out');
@@ -152,7 +157,7 @@ class _AuthGateState extends State<AuthGate> {
         }
         await _checkMentorProfile();
       } else {
-        debugPrint('🔍 Calling initial _checkUserProfile()...');
+        debugPrint('🎓 User identified as student, checking student profile...');
         if (mounted) {
           setState(() {
             _isMentor = false;

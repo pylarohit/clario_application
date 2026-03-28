@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'chat_page.dart';
 
 // ========================================
 // MENTOR DETAIL PAGE - Production Ready
@@ -259,13 +261,63 @@ class _MentorDetailPageState extends State<MentorDetailPage> {
                             horizontal: horizontalPadding,
                           ),
                           child: ElevatedButton.icon(
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Chat feature coming soon'),
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
+                            onPressed: () async {
+                              final supabase = Supabase.instance.client;
+                              final currentUser = supabase.auth.currentUser;
+                              
+                              if (currentUser == null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Please login to chat with mentors')),
+                                );
+                                return;
+                              }
+
+                              try {
+                                // 1. Check if room exists
+                                var room = await supabase
+                                    .from('chat_rooms')
+                                    .select()
+                                    .eq('student_id', currentUser.id)
+                                    .eq('mentor_id', mentorId)
+                                    .maybeSingle();
+
+                                // 2. Create room if it doesn't exist
+                                if (room == null) {
+                                  room = await supabase.from('chat_rooms').insert({
+                                    'student_id': currentUser.id,
+                                    'mentor_id': mentorId,
+                                    'mentor_name': fullName,
+                                    'mentor_position': currentPosition,
+                                    'mentor_avatar': avatarUrl,
+                                    'student_name': currentUser.userMetadata?['full_name'] ?? 'Student',
+                                    'student_avatar': 'assets/a1.png', // Default student avatar
+                                    'last_message': 'Started a conversation',
+                                    'updated_at': DateTime.now().toIso8601String(),
+                                  }).select().single();
+                                }
+
+                                if (mounted && room != null) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ChatDetailPage(
+                                        roomId: room!['id'],
+                                        mentorName: fullName,
+                                        mentorPosition: currentPosition,
+                                        mentorAvatar: avatarUrl.isNotEmpty ? avatarUrl : 'assets/a1.png',
+                                        isOnline: true,
+                                      ),
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                debugPrint('❌ Error starting chat: $e');
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Could not start chat: $e')),
+                                  );
+                                }
+                              }
                             },
                             icon: Icon(
                               Icons.chat_bubble_outline,

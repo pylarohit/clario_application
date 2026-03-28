@@ -50,6 +50,7 @@ dependencies:
   youtube_player_iframe: ^5.2.2
   file_picker: ^8.1.4
   speech_to_text: ^7.0.0
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/intl.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -10,54 +12,26 @@ class ChatPage extends StatefulWidget {
 class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
+  final _supabase = Supabase.instance.client;
   
-  final List<Map<String, dynamic>> _conversations = [
-    {
-      'id': '1',
-      'name': 'Zatinder Mehta',
-      'position': 'Data Scientist',
-      'avatar': 'assets/a1.png',
-      'lastMessage': 'Sure, I can help you with that career transition!',
-      'time': '10:30 AM',
-      'unread': 2,
-      'online': true,
-    },
-    {
-      'id': '2',
-      'name': 'Rajesh Kumar',
-      'position': 'Business Analyst',
-      'avatar': 'assets/a2.png',
-      'lastMessage': 'Have you checked out those resources I sent?',
-      'time': '9:15 AM',
-      'unread': 0,
-      'online': true,
-    },
-    {
-      'id': '3',
-      'name': 'Priya Sharma',
-      'position': 'Cloud Engineer',
-      'avatar': 'assets/a3.png',
-      'lastMessage': 'Great progress! Keep up the good work.',
-      'time': 'Yesterday',
-      'unread': 1,
-      'online': false,
-    },
-    {
-      'id': '4',
-      'name': 'Amit Patel',
-      'position': 'Full Stack Developer',
-      'avatar': 'assets/a1.png',
-      'lastMessage': 'I\'ll schedule our next session for tomorrow',
-      'time': 'Yesterday',
-      'unread': 0,
-      'online': false,
-    },
-  ];
+  Stream<List<Map<String, dynamic>>>? _roomsStream;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _setupRoomsStream();
+  }
+
+  void _setupRoomsStream() {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId != null) {
+      _roomsStream = _supabase
+          .from('chat_rooms')
+          .stream(primaryKey: ['id'])
+          .order('updated_at')
+          .map((maps) => maps.where((m) => m['student_id'] == userId || m['mentor_id'] == userId).toList());
+    }
   }
 
   @override
@@ -185,17 +159,28 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
   }
 
   Widget _buildChatList() {
-    return Container(
-      color: Color(0xFFF5F7FA),
-      child: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildConversationList(_conversations),
-          _buildConversationList(
-            _conversations.where((conv) => conv['unread'] > 0).toList(),
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _roomsStream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        
+        final rooms = snapshot.data ?? [];
+        
+        return Container(
+          color: const Color(0xFFF5F7FA),
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildConversationList(rooms),
+              _buildConversationList(
+                rooms.where((room) => (room['unread_count'] ?? 0) > 0).toList(),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -257,10 +242,11 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
             context,
             MaterialPageRoute(
               builder: (context) => ChatDetailPage(
-                mentorName: conversation['name'],
-                mentorPosition: conversation['position'],
-                mentorAvatar: conversation['avatar'],
-                isOnline: conversation['online'],
+                roomId: conversation['id'],
+                mentorName: conversation['mentor_name'] ?? 'Mentor',
+                mentorPosition: conversation['mentor_position'] ?? 'Expert',
+                mentorAvatar: conversation['mentor_avatar'] ?? 'assets/a1.png',
+                isOnline: conversation['is_online'] ?? false,
               ),
             ),
           );
@@ -275,9 +261,9 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
                 children: [
                   CircleAvatar(
                     radius: 28,
-                    backgroundImage: AssetImage(conversation['avatar']),
+                    backgroundImage: AssetImage(conversation['mentor_avatar'] ?? 'assets/a1.png'),
                   ),
-                  if (conversation['online'])
+                  if (conversation['is_online'] == true)
                     Positioned(
                       right: 0,
                       bottom: 0,
@@ -285,7 +271,7 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
                         width: 16,
                         height: 16,
                         decoration: BoxDecoration(
-                          color: Color(0xFF4CAF50),
+                          color: const Color(0xFF4CAF50),
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white, width: 2),
                         ),
@@ -305,8 +291,8 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
                       children: [
                         Expanded(
                           child: Text(
-                            conversation['name'],
-                            style: TextStyle(
+                            conversation['mentor_name'] ?? 'Mentor',
+                            style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
                               color: Color(0xFF1B2347),
@@ -315,7 +301,9 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
                           ),
                         ),
                         Text(
-                          conversation['time'],
+                          conversation['updated_at'] != null 
+                            ? DateFormat.jm().format(DateTime.parse(conversation['updated_at']))
+                            : '',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey[600],
@@ -325,8 +313,8 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
                     ),
                     SizedBox(height: 4),
                     Text(
-                      conversation['position'],
-                      style: TextStyle(
+                      conversation['mentor_position'] ?? 'Expert',
+                      style: const TextStyle(
                         fontSize: 12,
                         color: Color(0xFF5E9EF5),
                       ),
@@ -337,13 +325,13 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
                       children: [
                         Expanded(
                           child: Text(
-                            conversation['lastMessage'],
+                            conversation['last_message'] ?? 'No messages yet',
                             style: TextStyle(
                               fontSize: 14,
-                              color: conversation['unread'] > 0
-                                  ? Color(0xFF1B2347)
+                              color: (conversation['unread_count'] ?? 0) > 0
+                                  ? const Color(0xFF1B2347)
                                   : Colors.grey[600],
-                              fontWeight: conversation['unread'] > 0
+                              fontWeight: (conversation['unread_count'] ?? 0) > 0
                                   ? FontWeight.w500
                                   : FontWeight.normal,
                             ),
@@ -351,16 +339,16 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (conversation['unread'] > 0)
+                        if ((conversation['unread_count'] ?? 0) > 0)
                           Container(
-                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: Color(0xFF5E9EF5),
+                              color: const Color(0xFF5E9EF5),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              '${conversation['unread']}',
-                              style: TextStyle(
+                              '${conversation['unread_count']}',
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
@@ -421,6 +409,7 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
 
 // Chat Detail Page
 class ChatDetailPage extends StatefulWidget {
+  final String roomId;
   final String mentorName;
   final String mentorPosition;
   final String mentorAvatar;
@@ -428,6 +417,7 @@ class ChatDetailPage extends StatefulWidget {
 
   const ChatDetailPage({
     super.key,
+    required this.roomId,
     required this.mentorName,
     required this.mentorPosition,
     required this.mentorAvatar,
@@ -441,29 +431,23 @@ class ChatDetailPage extends StatefulWidget {
 class _ChatDetailPageState extends State<ChatDetailPage> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final _supabase = Supabase.instance.client;
   
-  final List<Map<String, dynamic>> _messages = [
-    {
-      'text': 'Hi! I saw your profile and I\'m interested in getting career guidance.',
-      'isMe': true,
-      'time': '9:00 AM',
-    },
-    {
-      'text': 'Hello! I\'d be happy to help. What specific areas are you looking to improve?',
-      'isMe': false,
-      'time': '9:05 AM',
-    },
-    {
-      'text': 'I\'m trying to transition into data science. Could you guide me on what skills I should focus on?',
-      'isMe': true,
-      'time': '9:07 AM',
-    },
-    {
-      'text': 'Sure, I can help you with that career transition! Let me share some resources and we can set up a detailed session.',
-      'isMe': false,
-      'time': '10:30 AM',
-    },
-  ];
+  Stream<List<Map<String, dynamic>>>? _messagesStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupMessagesStream();
+  }
+
+  void _setupMessagesStream() {
+    _messagesStream = _supabase
+        .from('messages')
+        .stream(primaryKey: ['id'])
+        .eq('room_id', widget.roomId)
+        .order('created_at', ascending: false);
+  }
 
   @override
   void dispose() {
@@ -550,12 +534,39 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       body: Column(
         children: [
           Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: EdgeInsets.all(16),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                return _buildMessageBubble(_messages[index]);
+            child: StreamBuilder<List<Map<String, dynamic>>>(
+              stream: _messagesStream,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final messages = snapshot.data ?? [];
+                
+                // Scroll to bottom when new messages arrive
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (_scrollController.hasClients) {
+                    _scrollController.animateTo(
+                      _scrollController.position.maxScrollExtent,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                  }
+                });
+
+                return ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(16),
+                  reverse: true, // Show newest at the bottom
+                  itemCount: messages.length,
+                  itemBuilder: (context, index) {
+                    final msg = messages[index];
+                    return _buildMessageBubble({
+                      'text': msg['text'],
+                      'isMe': msg['sender_id'] == _supabase.auth.currentUser?.id,
+                      'time': DateFormat.jm().format(DateTime.parse(msg['created_at'])),
+                    });
+                  },
+                );
               },
             ),
           ),
@@ -670,25 +681,28 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                 shape: BoxShape.circle,
               ),
               child: IconButton(
-                icon: Icon(Icons.send, color: Colors.white),
-                onPressed: () {
-                  if (_messageController.text.trim().isNotEmpty) {
-                    setState(() {
-                      _messages.add({
-                        'text': _messageController.text.trim(),
-                        'isMe': true,
-                        'time': 'Just now',
+                icon: const Icon(Icons.send, color: Colors.white),
+                onPressed: () async {
+                  final text = _messageController.text.trim();
+                  if (text.isNotEmpty) {
+                    _messageController.clear();
+                    try {
+                      final userId = _supabase.auth.currentUser?.id;
+                      await _supabase.from('messages').insert({
+                        'room_id': widget.roomId,
+                        'sender_id': userId,
+                        'text': text,
+                        'created_at': DateTime.now().toIso8601String(),
                       });
-                      _messageController.clear();
-                    });
-                    // Auto scroll to bottom
-                    Future.delayed(Duration(milliseconds: 100), () {
-                      _scrollController.animateTo(
-                        _scrollController.position.maxScrollExtent,
-                        duration: Duration(milliseconds: 300),
-                        curve: Curves.easeOut,
-                      );
-                    });
+                      
+                      // Update room's last message
+                      await _supabase.from('chat_rooms').update({
+                        'last_message': text,
+                        'updated_at': DateTime.now().toIso8601String(),
+                      }).eq('id', widget.roomId);
+                    } catch (e) {
+                      debugPrint('❌ Error sending message: $e');
+                    }
                   }
                 },
               ),

@@ -221,14 +221,14 @@ class _MentorDashboardState extends State<MentorDashboard> with SingleTickerProv
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        'Welcome ${_mentorProfile?['full_name'] ?? 'Santhi'}',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.black,
-                        ),
+                    Text(
+                      'Welcome ${_mentorProfile?['full_name']?.toString() ?? 'Santhi'}',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.black,
                       ),
+                    ),
                       const SizedBox(height: 10),
                       Text(
                         'Check your recent activity and upcoming sessions here.',
@@ -679,7 +679,9 @@ class _MentorDashboardState extends State<MentorDashboard> with SingleTickerProv
                     CircleAvatar(
                       backgroundColor: Colors.white,
                       child: Text(
-                        (_mentorProfile?['full_name'] ?? 'M')[0].toUpperCase(),
+                        (_mentorProfile?['full_name'] != null && _mentorProfile!['full_name'].toString().isNotEmpty)
+                            ? _mentorProfile!['full_name'].toString()[0].toUpperCase()
+                            : 'M',
                         style: const TextStyle(color: Color(0xFF1B2347)),
                       ),
                     ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/intl.dart';
 
 class MentorChatPage extends StatefulWidget {
   const MentorChatPage({super.key});
@@ -11,55 +12,26 @@ class MentorChatPage extends StatefulWidget {
 class _MentorChatPageState extends State<MentorChatPage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
+  final _supabase = Supabase.instance.client;
   
-  // Sample student conversations for the mentor
-  final List<Map<String, dynamic>> _conversations = [
-    {
-      'id': '1',
-      'name': 'Rahul Verma',
-      'grade': 'College Junior',
-      'avatar': 'assets/a1.png',
-      'lastMessage': 'Can we discuss the project timeline today?',
-      'time': '11:45 AM',
-      'unread': 3,
-      'online': true,
-    },
-    {
-      'id': '2',
-      'name': 'Megha Gupta',
-      'grade': 'Engineering Senior',
-      'avatar': 'assets/a3.png',
-      'lastMessage': 'I\'ve completed the assignments you suggested.',
-      'time': '10:20 AM',
-      'unread': 0,
-      'online': true,
-    },
-    {
-      'id': '3',
-      'name': 'Aryan Singh',
-      'grade': 'High School Student',
-      'avatar': 'assets/a2.png',
-      'lastMessage': 'Thanks for the guidance on the college applications!',
-      'time': 'Yesterday',
-      'unread': 1,
-      'online': false,
-    },
-    {
-      'id': '4',
-      'name': 'Sneha Rao',
-      'grade': 'Freshman',
-      'avatar': 'assets/a5.png',
-      'lastMessage': 'When is our next scheduled meeting?',
-      'time': 'Wednesday',
-      'unread': 0,
-      'online': false,
-    },
-  ];
+  Stream<List<Map<String, dynamic>>>? _roomsStream;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _setupRoomsStream();
+  }
+
+  void _setupRoomsStream() {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId != null) {
+      _roomsStream = _supabase
+          .from('chat_rooms')
+          .stream(primaryKey: ['id'])
+          .order('updated_at')
+          .map((maps) => maps.where((m) => m['student_id'] == userId || m['mentor_id'] == userId).toList());
+    }
   }
 
   @override
@@ -188,14 +160,25 @@ class _MentorChatPageState extends State<MentorChatPage> with SingleTickerProvid
   }
 
   Widget _buildChatList() {
-    return TabBarView(
-      controller: _tabController,
-      children: [
-        _buildConversationList(_conversations),
-        _buildConversationList(
-          _conversations.where((conv) => conv['unread'] > 0).toList(),
-        ),
-      ],
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _roomsStream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        
+        final rooms = snapshot.data ?? [];
+        
+        return TabBarView(
+          controller: _tabController,
+          children: [
+            _buildConversationList(rooms),
+            _buildConversationList(
+              rooms.where((room) => (room['unread_count'] ?? 0) > 0).toList(),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -249,10 +232,11 @@ class _MentorChatPageState extends State<MentorChatPage> with SingleTickerProvid
             context,
             MaterialPageRoute(
               builder: (context) => MentorChatDetailPage(
-                studentName: conversation['name'],
-                studentGrade: conversation['grade'],
-                studentAvatar: conversation['avatar'],
-                isOnline: conversation['online'],
+                roomId: conversation['id'],
+                studentName: conversation['student_name'] ?? 'Student',
+                studentGrade: conversation['student_grade'] ?? 'Scholar',
+                studentAvatar: conversation['student_avatar'] ?? 'assets/a1.png',
+                isOnline: conversation['is_online'] ?? false,
               ),
             ),
           );
@@ -266,10 +250,10 @@ class _MentorChatPageState extends State<MentorChatPage> with SingleTickerProvid
                 children: [
                   CircleAvatar(
                     radius: 28,
-                    backgroundImage: AssetImage(conversation['avatar']),
+                    backgroundImage: AssetImage(conversation['student_avatar'] ?? 'assets/a1.png'),
                     backgroundColor: Colors.grey[200],
                   ),
-                  if (conversation['online'])
+                  if (conversation['is_online'] == true)
                     Positioned(
                       right: 0,
                       bottom: 0,
@@ -294,7 +278,7 @@ class _MentorChatPageState extends State<MentorChatPage> with SingleTickerProvid
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          conversation['name'],
+                          conversation['student_name'] ?? 'Student',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -302,7 +286,9 @@ class _MentorChatPageState extends State<MentorChatPage> with SingleTickerProvid
                           ),
                         ),
                         Text(
-                          conversation['time'],
+                          conversation['updated_at'] != null 
+                            ? DateFormat.jm().format(DateTime.parse(conversation['updated_at']))
+                            : '',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey[500],
@@ -312,7 +298,7 @@ class _MentorChatPageState extends State<MentorChatPage> with SingleTickerProvid
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      conversation['grade'],
+                      conversation['student_grade'] ?? 'Scholar',
                       style: const TextStyle(
                         fontSize: 12,
                         color: Color(0xFF5E9EF5),
@@ -324,13 +310,13 @@ class _MentorChatPageState extends State<MentorChatPage> with SingleTickerProvid
                       children: [
                         Expanded(
                           child: Text(
-                            conversation['lastMessage'],
+                            conversation['last_message'] ?? 'No messages yet',
                             style: TextStyle(
                               fontSize: 14,
-                              color: conversation['unread'] > 0
+                              color: (conversation['unread_count'] ?? 0) > 0
                                   ? const Color(0xFF1B2347)
                                   : Colors.grey[600],
-                              fontWeight: conversation['unread'] > 0
+                              fontWeight: (conversation['unread_count'] ?? 0) > 0
                                   ? FontWeight.w600
                                   : FontWeight.normal,
                             ),
@@ -338,7 +324,7 @@ class _MentorChatPageState extends State<MentorChatPage> with SingleTickerProvid
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (conversation['unread'] > 0)
+                        if ((conversation['unread_count'] ?? 0) > 0)
                           Container(
                             margin: const EdgeInsets.only(left: 8),
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -347,7 +333,7 @@ class _MentorChatPageState extends State<MentorChatPage> with SingleTickerProvid
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
-                              '${conversation['unread']}',
+                              '${conversation['unread_count']}',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 10,
@@ -369,6 +355,7 @@ class _MentorChatPageState extends State<MentorChatPage> with SingleTickerProvid
 }
 
 class MentorChatDetailPage extends StatefulWidget {
+  final String roomId;
   final String studentName;
   final String studentGrade;
   final String studentAvatar;
@@ -376,6 +363,7 @@ class MentorChatDetailPage extends StatefulWidget {
 
   const MentorChatDetailPage({
     super.key,
+    required this.roomId,
     required this.studentName,
     required this.studentGrade,
     required this.studentAvatar,
@@ -389,24 +377,23 @@ class MentorChatDetailPage extends StatefulWidget {
 class _MentorChatDetailPageState extends State<MentorChatDetailPage> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final _supabase = Supabase.instance.client;
   
-  final List<Map<String, dynamic>> _messages = [
-    {
-      'text': 'Hi mentor, I received the notes for last session. Thank you!',
-      'isMe': false,
-      'time': '10:00 AM',
-    },
-    {
-      'text': 'You\'re welcome, Rahul! Have you had a chance to go through the practice problems?',
-      'isMe': true,
-      'time': '10:15 AM',
-    },
-    {
-      'text': 'Yes, I finished the first two. Can we discuss the project timeline today?',
-      'isMe': false,
-      'time': '11:45 AM',
-    },
-  ];
+  Stream<List<Map<String, dynamic>>>? _messagesStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupMessagesStream();
+  }
+
+  void _setupMessagesStream() {
+    _messagesStream = _supabase
+        .from('messages')
+        .stream(primaryKey: ['id'])
+        .eq('room_id', widget.roomId)
+        .order('created_at', ascending: false);
+  }
 
   @override
   void dispose() {
@@ -489,12 +476,39 @@ class _MentorChatDetailPageState extends State<MentorChatDetailPage> {
       body: Column(
         children: [
           Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                return _buildMessageBubble(_messages[index]);
+            child: StreamBuilder<List<Map<String, dynamic>>>(
+              stream: _messagesStream,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final messages = snapshot.data ?? [];
+                
+                // Scroll to bottom when new messages arrive
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (_scrollController.hasClients) {
+                    _scrollController.animateTo(
+                      _scrollController.position.maxScrollExtent,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                  }
+                });
+
+                return ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(16),
+                  reverse: true, // Show newest at the bottom
+                  itemCount: messages.length,
+                  itemBuilder: (context, index) {
+                    final msg = messages[index];
+                    return _buildMessageBubble({
+                      'text': msg['text'],
+                      'isMe': msg['sender_id'] == _supabase.auth.currentUser?.id,
+                      'time': DateFormat.jm().format(DateTime.parse(msg['created_at'])),
+                    });
+                  },
+                );
               },
             ),
           ),
@@ -615,25 +629,27 @@ class _MentorChatDetailPageState extends State<MentorChatDetailPage> {
             ),
             child: IconButton(
               icon: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
-              onPressed: () {
-                if (_messageController.text.trim().isNotEmpty) {
-                  setState(() {
-                    _messages.add({
-                      'text': _messageController.text.trim(),
-                      'isMe': true,
-                      'time': 'Just now',
+              onPressed: () async {
+                final text = _messageController.text.trim();
+                if (text.isNotEmpty) {
+                  _messageController.clear();
+                  try {
+                    final userId = _supabase.auth.currentUser?.id;
+                    await _supabase.from('messages').insert({
+                      'room_id': widget.roomId,
+                      'sender_id': userId,
+                      'text': text,
+                      'created_at': DateTime.now().toIso8601String(),
                     });
-                    _messageController.clear();
-                  });
-                  Future.delayed(const Duration(milliseconds: 100), () {
-                    if (_scrollController.hasClients) {
-                      _scrollController.animateTo(
-                        _scrollController.position.maxScrollExtent,
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeOut,
-                      );
-                    }
-                  });
+                    
+                    // Update room's last message
+                    await _supabase.from('chat_rooms').update({
+                      'last_message': text,
+                      'updated_at': DateTime.now().toIso8601String(),
+                    }).eq('id', widget.roomId);
+                  } catch (e) {
+                    debugPrint('❌ Error sending message: $e');
+                  }
                 }
               },
             ),

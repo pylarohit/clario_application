@@ -3125,59 +3125,65 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
             
             // Badges & Salary
             Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Skills Chips
-                  Row(
-                    children: [
-                      ...skills.map((s) => Container(
-                        margin: const EdgeInsets.only(right: 8),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[100],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          s,
-                          style: TextStyle(fontSize: 12, color: Colors.grey[700]),
-                        ),
-                      )),
-                      if (description.length > 50) 
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[50],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text('+${(description.length / 100).floor() + 2}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                        ),
-                    ],
-                  ),
-                  
-                  // Salary Badge (Green)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE8F5E9).withOpacity(0.8),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Skills Chips (Horizontally Scrollable)
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        Text(
-                          salary == 'Not Disclosed' ? '₹ Not Disclosed' : salary,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF2E7D32),
-                            fontWeight: FontWeight.w600,
-                            fontStyle: FontStyle.italic,
+                        ...skills.map((s) => Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Icon(Icons.money_rounded, color: Color(0xFF4CAF50), size: 14),
+                          child: Text(
+                            s,
+                            style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                          ),
+                        )),
+                        if (description.length > 50)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[50],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text('+${(description.length / 100).floor() + 2}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                          ),
                       ],
                     ),
                   ),
-                ],
+                ),
+                const SizedBox(width: 8),
+                // Salary Badge (Green)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8F5E9).withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        salary == 'Not Disclosed' ? '₹ Not Disclosed' : salary,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF2E7D32),
+                          fontWeight: FontWeight.w600,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.money_rounded, color: Color(0xFF4CAF50), size: 14),
+                    ],
+                  ),
+                ),
+              ],
             ),
             
             const SizedBox(height: 16),
@@ -3188,25 +3194,33 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Text(
-                      posted.isNotEmpty ? posted : 'Just now',
-                      style: TextStyle(fontSize: 13, color: Colors.blue[600]),
-                    ),
-                    const SizedBox(width: 20),
-                    Row(
-                      children: [
-                        Icon(Icons.hourglass_empty_rounded, size: 14, color: Colors.blue[600]),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Apply soon',
-                          style: TextStyle(fontSize: 12, color: Colors.blue[600]),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          posted.isNotEmpty ? posted : 'Just now',
+                          style: TextStyle(fontSize: 13, color: Colors.blue[600]),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ],
-                    ),
-                  ],
+                      ),
+                      const SizedBox(width: 16),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.hourglass_empty_rounded, size: 14, color: Colors.blue[600]),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Apply soon',
+                            style: TextStyle(fontSize: 12, color: Colors.blue[600]),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 8),
                 Icon(Icons.favorite_outline_rounded, color: Colors.grey[400], size: 24),
               ],
             ),

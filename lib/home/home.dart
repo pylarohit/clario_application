@@ -533,6 +533,11 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 _bottomNavIndex = 3;
               });
             },
+            onBack: () {
+              setState(() {
+                _bottomNavIndex = 0;
+              });
+            },
           );
         case 3: // Profile Tab (placeholder)
           return _buildProfilePage();

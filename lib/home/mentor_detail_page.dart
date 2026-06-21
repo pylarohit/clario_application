@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'chat_page.dart';
+import '../components/mentor_avatar.dart';
+
 
 // ========================================
 // MENTOR DETAIL PAGE - Production Ready
@@ -164,42 +166,13 @@ class _MentorDetailPageState extends State<MentorDetailPage> {
                               ),
                             ],
                           ),
-                          child: CircleAvatar(
+                          child: MentorAvatar(
+                            avatarUrl: avatarUrl,
+                            name: fullName,
                             radius: isMobile ? 45 : 50,
-                            backgroundColor: Colors.grey[200],
-                            child: avatarUrl.isNotEmpty
-                                ? ClipOval(
-                                    child: Image.network(
-                                      widget.mentor['avatar'],
-                                      width: 100,
-                                      height: 100,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) {
-                                        return Center(
-                                          child: Text(
-                                            (widget.mentor['full_name']?[0] ??
-                                                    'M')
-                                                .toUpperCase(),
-                                            style: TextStyle(
-                                              fontSize: 36,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.grey[600],
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  )
-                                : Text(
-                                    (widget.mentor['full_name']?[0] ?? 'M')
-                                        .toUpperCase(),
-                                    style: TextStyle(
-                                      fontSize: 36,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
+                            shape: BoxShape.circle,
                           ),
+
                         ),
                         SizedBox(height: isMobile ? 12 : 16),
 

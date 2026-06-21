@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:video_player/video_player.dart';
 import 'mentor_detail_page.dart';
 import '../components/premium_loading_indicator.dart';
+import '../components/mentor_avatar.dart';
 
 // Main StatefulWidget for Mentor Connect Page
 class MentorConnectPage extends StatefulWidget {
@@ -912,19 +913,13 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
                     bottomLeft: Radius.circular(24),
                     topLeft: Radius.circular(24),
                   ),
-                  child: (mentor['avatar'] != null && mentor['avatar'].toString().isNotEmpty)
-                      ? Image.network(
-                          mentor['avatar'].toString(),
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Container(
-                            color: Colors.grey[100],
-                            child: const Icon(Icons.person, size: 40, color: Colors.grey),
-                          ),
-                        )
-                      : Container(
-                          color: Colors.grey[100],
-                          child: const Icon(Icons.person, size: 40, color: Colors.grey),
-                        ),
+                  child: MentorAvatar(
+                    avatarUrl: mentor['avatar']?.toString(),
+                    name: name,
+                    shape: BoxShape.rectangle,
+                    radius: 40,
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
               // Right Side: Info and Actions

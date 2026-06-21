@@ -3,10 +3,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
+import '../components/mentor_avatar.dart';
+
 
 class ChatPage extends StatefulWidget {
   final VoidCallback? onProfileClick;
-  const ChatPage({super.key, this.onProfileClick});
+  final VoidCallback? onBack;
+  const ChatPage({super.key, this.onProfileClick, this.onBack});
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -17,6 +20,8 @@ class _ChatPageState extends State<ChatPage> {
   final _supabase = Supabase.instance.client;
   Stream<List<Map<String, dynamic>>>? _roomsStream;
   String? _userPhotoUrl;
+  String _searchQuery = '';
+
 
   @override
   void initState() {
@@ -63,15 +68,85 @@ class _ChatPageState extends State<ChatPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFB1A9DE), // Lavender Background
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(80.0),
+        child: AppBar(
+          toolbarHeight: 80.0,
+          backgroundColor: const Color(0xFFB1A9DE),
+          elevation: 0,
+          centerTitle: true,
+          title: Text(
+            'Chat',
+            style: GoogleFonts.outfit(
+              color: const Color(0xFF1B2347),
+              fontWeight: FontWeight.bold,
+              fontSize: 24,
+            ),
+          ),
+          leading: Padding(
+            padding: const EdgeInsets.only(left: 12.0),
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Color(0xFF1B2347)),
+              onPressed: () {
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                } else if (widget.onBack != null) {
+                  widget.onBack!();
+                }
+              },
+            ),
+          ),
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 24.0),
+              child: Center(
+                child: GestureDetector(
+                  onTap: widget.onProfileClick,
+                  child: CircleAvatar(
+                    radius: 20,
+                    backgroundColor: const Color(0xFF5E9EF5),
+                    backgroundImage: _userPhotoUrl != null ? NetworkImage(_userPhotoUrl!) : null,
+                    onBackgroundImageError: _userPhotoUrl != null
+                        ? (exception, stackTrace) {
+                            setState(() {
+                              _userPhotoUrl = null;
+                            });
+                          }
+                        : null,
+                    child: _userPhotoUrl == null
+                        ? Text(
+                            _supabase.auth.currentUser?.email?.substring(0, 1).toUpperCase() ?? 'U',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          )
+                        : null,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
       body: StreamBuilder<List<Map<String, dynamic>>>(
         stream: _roomsStream,
         builder: (context, snapshot) {
           final rooms = snapshot.data ?? [];
           final bool isLoading = snapshot.connectionState == ConnectionState.waiting;
           
+          final query = _searchQuery.toLowerCase().trim();
+          final filteredRooms = query.isEmpty
+              ? rooms
+              : rooms.where((room) {
+                  final mentorName = room['mentor_name']?.toString().toLowerCase() ?? '';
+                  final lastMsg = room['last_message']?.toString().toLowerCase() ?? '';
+                  return mentorName.contains(query) || lastMsg.contains(query);
+                }).toList();
+
           return Column(
             children: [
-              _buildTopBar(),
               Expanded(
                 child: Container(
                   width: double.infinity,
@@ -85,11 +160,11 @@ class _ChatPageState extends State<ChatPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const SizedBox(height: 30),
-                        _buildHeaderRow(),
+                        _buildSearchBar(),
                         const SizedBox(height: 30),
-                        _buildActivitiesSection(rooms),
+                        _buildActivitiesSection(filteredRooms),
                         const SizedBox(height: 30),
-                        _buildMessagesSection(rooms, isLoading),
+                        _buildMessagesSection(filteredRooms, isLoading),
                       ],
                     ),
                   ),
@@ -97,71 +172,58 @@ class _ChatPageState extends State<ChatPage> {
               ),
             ],
           );
+
         },
       ),
     );
   }
 
-  Widget _buildTopBar() {
-    return Container(
-      padding: const EdgeInsets.only(top: 50, left: 24, right: 24, bottom: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const SizedBox(width: 40), // Placeholder to balance
-          GestureDetector(
-            onTap: () => widget.onProfileClick?.call(),
-            child: CircleAvatar(
-              radius: 18,
-              backgroundColor: const Color(0xFF5E9EF5),
-              backgroundImage: _userPhotoUrl != null ? NetworkImage(_userPhotoUrl!) : null,
-              onBackgroundImageError: _userPhotoUrl != null
-                  ? (exception, stackTrace) {
-                      setState(() {
-                        _userPhotoUrl = null;
-                      });
-                    }
-                  : null,
-              child: _userPhotoUrl == null
-                  ? Text(
-                      _supabase.auth.currentUser?.email?.substring(0, 1).toUpperCase() ?? 'U',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    )
-                  : null,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildHeaderRow() {
+
+
+  Widget _buildSearchBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            'Chat',
-            style: GoogleFonts.outfit(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF1B2347),
-            ),
+      child: TextField(
+        controller: _searchController,
+        onChanged: (value) {
+          setState(() {
+            _searchQuery = value;
+          });
+        },
+        style: GoogleFonts.outfit(
+          fontSize: 15,
+          color: const Color(0xFF1B2347),
+        ),
+        decoration: InputDecoration(
+          hintText: 'Search chats...',
+          hintStyle: GoogleFonts.outfit(
+            fontSize: 15,
+            color: Colors.black38,
           ),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: const Color(0xFFB1A9DE).withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.search, color: Color(0xFF6B4EE0), size: 24),
+          prefixIcon: const Icon(Icons.search, color: Color(0xFF6B4EE0), size: 22),
+          suffixIcon: _searchController.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear, color: Colors.black38, size: 18),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() {
+                      _searchQuery = '';
+                    });
+                  },
+                )
+              : null,
+          filled: true,
+          fillColor: const Color(0xFFB1A9DE).withOpacity(0.12),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
           ),
-        ],
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
+          ),
+        ),
       ),
     );
   }
@@ -197,9 +259,12 @@ class _ChatPageState extends State<ChatPage> {
                     border: Border.all(color: const Color(0xFF6B4EE0), width: 2.5),
                   ),
                   padding: const EdgeInsets.all(2),
-                  child: CircleAvatar(
-                    backgroundImage: NetworkImage(room['mentor_avatar'] ?? 'https://i.pravatar.cc/150?u=chat'),
+                  child: MentorAvatar(
+                    avatarUrl: room['mentor_avatar']?.toString(),
+                    name: room['mentor_name']?.toString() ?? 'Mentor',
+                    radius: 30,
                   ),
+
                 ),
               );
             }).toList(),
@@ -294,9 +359,10 @@ class _ChatPageState extends State<ChatPage> {
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
         child: Row(
           children: [
-            CircleAvatar(
+            MentorAvatar(
               radius: 32,
-              backgroundImage: NetworkImage(room['mentor_avatar'] ?? 'https://i.pravatar.cc/150?u=chat'),
+              avatarUrl: room['mentor_avatar']?.toString(),
+              name: room['mentor_name']?.toString() ?? 'Mentor',
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -438,9 +504,10 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
             onPressed: () => Navigator.pop(context),
           ),
           const SizedBox(width: 8),
-          CircleAvatar(
+          MentorAvatar(
             radius: 22,
-            backgroundImage: NetworkImage(widget.mentorAvatar),
+            avatarUrl: widget.mentorAvatar,
+            name: widget.mentorName,
           ),
           const SizedBox(width: 14),
           Column(
@@ -475,7 +542,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               if (!isMe)
-                CircleAvatar(radius: 16, backgroundImage: NetworkImage(widget.mentorAvatar)),
+                MentorAvatar(radius: 16, avatarUrl: widget.mentorAvatar, name: widget.mentorName),
               const SizedBox(width: 8),
               Flexible(
                 child: Container(

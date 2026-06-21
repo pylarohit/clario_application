@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:video_player/video_player.dart';
 import 'mentor_detail_page.dart';
+import '../components/premium_loading_indicator.dart';
 
 // Main StatefulWidget for Mentor Connect Page
 class MentorConnectPage extends StatefulWidget {
@@ -479,14 +480,77 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
         children: List.generate(
           count,
           (index) => Expanded(
-            child: Container(
-              margin: EdgeInsets.only(right: index < count - 1 ? 8 : 0),
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: EdgeInsets.only(right: index < count - 1 ? 8.0 : 0.0),
+              child: const PulseSkeleton(
+                width: double.infinity,
+                height: double.infinity,
+                borderRadius: 16,
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMentorsSkeleton(bool isMobile) {
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) => Padding(
+            padding: const EdgeInsets.only(bottom: 16.0),
+            child: Container(
+              height: isMobile ? 180 : 200,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: const Color(0xFFF3F4F6)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(24),
+                        topLeft: Radius.circular(24),
+                      ),
+                      child: const PulseSkeleton(width: double.infinity, height: double.infinity, borderRadius: 0),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 3,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          PulseSkeleton(width: 140, height: 18),
+                          SizedBox(height: 6),
+                          PulseSkeleton(width: 100, height: 12),
+                          SizedBox(height: 20),
+                          PulseSkeleton(width: 70, height: 10),
+                          SizedBox(height: 8),
+                          Row(
+                            children: [
+                              PulseSkeleton(width: 60, height: 20, borderRadius: 8),
+                              SizedBox(width: 8),
+                              PulseSkeleton(width: 60, height: 20, borderRadius: 8),
+                            ],
+                          ),
+                          Spacer(),
+                          PulseSkeleton(width: double.infinity, height: 36, borderRadius: 12),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          childCount: 3,
         ),
       ),
     );
@@ -758,21 +822,7 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
     bool isMobile,
   ) {
     if (_isLoading) {
-      return SliverFillRemaining(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CircularProgressIndicator(color: Color(0xFF5E9EF5)),
-              const SizedBox(height: 16),
-              Text(
-                'Loading mentors...',
-                style: GoogleFonts.inter(fontSize: 14, color: Colors.grey[600]),
-              ),
-            ],
-          ),
-        ),
-      );
+      return _buildMentorsSkeleton(isMobile);
     }
 
     if (_filteredMentors.isEmpty) {

@@ -19,6 +19,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import 'dart:ui';
 import 'dart:convert';
+import '../components/premium_loading_indicator.dart';
 
 /// Career Board Page Widget
 class CareerBoardPage extends StatefulWidget {
@@ -1836,8 +1837,8 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
       ),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFF5E9EF5),
+              child: PremiumLoadingIndicator(
+                message: 'Gathering career board details...',
               ),
             )
           : !_isQuizDone
@@ -2885,12 +2886,7 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
         const SizedBox(height: 16),
         // Job Cards in 2-column grid
         _isLoadingJobs
-            ? const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(40.0),
-                  child: CircularProgressIndicator(),
-                ),
-              )
+            ? _buildJobsSkeleton()
             : _jobsLoadFailed
                 ? Center(
                     child: Padding(
@@ -2956,11 +2952,9 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
                           if (_hasMoreJobs) ...[
                             const SizedBox(height: 16),
                             _isLoadingMoreJobs
-                                ? const Center(
-                                    child: Padding(
-                                      padding: EdgeInsets.all(16.0),
-                                      child: CircularProgressIndicator(),
-                                    ),
+                                ? const PremiumLoadingIndicator(
+                                    message: 'Loading more jobs...',
+                                    height: 80.0,
                                   )
                                 : Center(
                                     child: ElevatedButton.icon(
@@ -2986,6 +2980,99 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
                         ],
                       ),
       ],
+    );
+  }
+
+  Widget _buildJobsSkeleton() {
+    return Column(
+      children: List.generate(3, (index) => Padding(
+        padding: const EdgeInsets.only(bottom: 16.0),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFF3F4F6)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        PulseSkeleton(width: 180, height: 18),
+                        SizedBox(height: 8),
+                        PulseSkeleton(width: 100, height: 14),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const PulseSkeleton(width: 60, height: 60, borderRadius: 12),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const PulseSkeleton(width: 160, height: 14),
+              const SizedBox(height: 8),
+              const PulseSkeleton(width: 120, height: 14),
+              const SizedBox(height: 8),
+              const PulseSkeleton(width: 200, height: 14),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: const [
+                  PulseSkeleton(width: 80, height: 24, borderRadius: 8),
+                  PulseSkeleton(width: 100, height: 28, borderRadius: 20),
+                ],
+              ),
+            ],
+          ),
+        ),
+      )),
+    );
+  }
+
+  Widget _buildCollegesSkeleton() {
+    return Column(
+      children: List.generate(2, (index) => Container(
+        margin: const EdgeInsets.only(bottom: 24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: const Color(0xFFF3F4F6)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const PulseSkeleton(width: double.infinity, height: 140, borderRadius: 24),
+            Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  PulseSkeleton(width: 220, height: 18),
+                  SizedBox(height: 8),
+                  PulseSkeleton(width: 140, height: 14),
+                  SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      PulseSkeleton(width: 80, height: 14),
+                      PulseSkeleton(width: 80, height: 14),
+                    ],
+                  ),
+                  SizedBox(height: 16),
+                  PulseSkeleton(width: 180, height: 24, borderRadius: 8),
+                ],
+              ),
+            ),
+          ],
+        ),
+      )),
     );
   }
 
@@ -3287,7 +3374,7 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
         const SizedBox(height: 24),
 
         if (_isLoadingColleges)
-          const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()))
+          _buildCollegesSkeleton()
         else ...[
           // ── Case A: No Search Active -> Show All-India Top Ranking ──
           if (_collegeSearchLocation.isEmpty && _topCollegesList.isNotEmpty) ...[
@@ -3712,7 +3799,7 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
 
   /// Build courses grid using flat Column
   Widget _buildCoursesGrid() {
-    if (_isLoadingResources) return const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()));
+    if (_isLoadingResources) return const Center(child: Padding(padding: EdgeInsets.all(40), child: PremiumLoadingIndicator(message: 'Gathering top online courses...')));
     if (_resourcesList.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('No courses found.')));
 
     return Column(
@@ -3729,7 +3816,7 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
         )).toList(),
         if (_hasMoreResources)
           _isLoadingMoreResources
-              ? const CircularProgressIndicator()
+              ? const PremiumLoadingIndicator(height: 60.0, message: 'Loading more courses...')
               : TextButton.icon(
                   onPressed: () => _fetchRealResourcesData(isLoadMore: true),
                   icon: const Icon(Icons.add),
@@ -3741,7 +3828,7 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
 
   /// Build YouTube videos grid using flat Column
   Widget _buildYoutubeGrid() {
-    if (_isLoadingYoutube) return const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()));
+    if (_isLoadingYoutube) return const Center(child: Padding(padding: EdgeInsets.all(40), child: PremiumLoadingIndicator(message: 'Curating video recommendations...')));
     
     if (_youtubeLoadFailed || (_youtubeList.isEmpty && !_isLoadingYoutube)) {
       return Center(
@@ -3774,7 +3861,7 @@ Be precise and data-driven. Return realistic numbers that reflect actual market 
         )).toList(),
         if (_hasMoreYoutube)
           _isLoadingMoreYoutube
-              ? const CircularProgressIndicator()
+              ? const PremiumLoadingIndicator(height: 60.0, message: 'Loading more videos...')
               : TextButton.icon(
                   onPressed: () => _fetchYoutubeVideos(pageToken: _youtubeNextPageToken, isLoadMore: true),
                   icon: const Icon(Icons.add),

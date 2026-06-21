@@ -273,7 +273,34 @@ class _MentorDetailPageState extends State<MentorDetailPage> {
                               }
 
                               try {
-                                // 1. Check if room exists
+                                debugPrint('🧐 [Chat] Sync check for mentor: $mentorId');
+                                
+                                // 1. Ensure mentor exists in 'users' table (required for foreign key)
+                                final userCheck = await supabase
+                                    .from('users')
+                                    .select('id')
+                                    .eq('id', mentorId)
+                                    .maybeSingle();
+                                
+                                if (userCheck == null) {
+                                  debugPrint('🔌 [Chat] Mentor missing from users table. Syncing...');
+                                  try {
+                                    await supabase.from('users').insert({
+                                      'id': mentorId,
+                                      'userName': fullName,
+                                      'userEmail': widget.mentor['email'] ?? 'mentor@example.com',
+                                      'userPhone': widget.mentor['phone']?.toString(),
+                                      'current_status': currentPosition,
+                                      'institutionName': 'Reskill Network',
+                                      'mainFocus': 'Mentorship',
+                                    });
+                                    debugPrint('✅ [Chat] Mentor synced to users table');
+                                  } catch (e) {
+                                    debugPrint('⚠️ [Chat] Could not sync mentor to users: $e');
+                                  }
+                                }
+
+                                // 2. Check if room exists
                                 var room = await supabase
                                     .from('chat_rooms')
                                     .select()
@@ -281,7 +308,7 @@ class _MentorDetailPageState extends State<MentorDetailPage> {
                                     .eq('mentor_id', mentorId)
                                     .maybeSingle();
 
-                                // 2. Create room if it doesn't exist
+                                // 3. Create room if it doesn't exist
                                 if (room == null) {
                                   room = await supabase.from('chat_rooms').insert({
                                     'student_id': currentUser.id,
@@ -290,7 +317,7 @@ class _MentorDetailPageState extends State<MentorDetailPage> {
                                     'mentor_position': currentPosition,
                                     'mentor_avatar': avatarUrl,
                                     'student_name': currentUser.userMetadata?['full_name'] ?? 'Student',
-                                    'student_avatar': 'assets/a1.png', // Default student avatar
+                                    'student_avatar': 'assets/a1.png',
                                     'last_message': 'Started a conversation',
                                     'updated_at': DateTime.now().toIso8601String(),
                                   }).select().single();

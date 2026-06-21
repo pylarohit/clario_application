@@ -87,56 +87,12 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // ============================================================================
   // DATA - Mentors List (In production, fetch from API)
   // ============================================================================
-  List<Map<String, dynamic>> mentors = [
-    {
-      'id': '1',
-      'full_name': 'Zatinder Mehta',
-      'current_position': 'Data Scientist',
-      'expertise': ['skill building', 'career/path guidance', 'job placement'],
-      'rating': 5.0,
-      'avatar': 'assets/a1.png',
-    },
-    {
-      'id': '2',
-      'full_name': 'Rajesh Kumar',
-      'current_position': 'Business Analyst',
-      'expertise': [
-        'higher studies',
-        'career/path guidance',
-        'counseling & guidance',
-      ],
-      'rating': 4.7,
-      'avatar': 'assets/a2.png',
-    },
-    {
-      'id': '3',
-      'full_name': 'Priya Sharma',
-      'current_position': 'Cloud Engineer',
-      'expertise': ['higher studies', 'AWS', 'DevOps'],
-      'rating': 4.7,
-      'avatar': 'assets/a3.png',
-    },
-    {
-      'id': '4',
-      'full_name': 'Amit Patel',
-      'current_position': 'Full Stack Developer',
-      'expertise': ['Web Development', 'React', 'Node.js'],
-      'rating': 4.8,
-      'avatar': 'assets/a1.png',
-    },
-  ];
+  List<Map<String, dynamic>> mentors = [];
 
   // ============================================================================
   // DATA - Discover Users List (In production, fetch from API)
   // ============================================================================
-  List<Map<String, dynamic>> discoverUsers = [
-    {
-      'id': '1',
-      'userName': 'Alice',
-      'selectedCareer': 'Engineering',
-      'userAvatar': 'assets/a2.png',
-    },
-  ];
+  List<Map<String, dynamic>> discoverUsers = [];
 
   // ============================================================================
   // DATA - Colleges List (Loaded from Supabase)
@@ -263,7 +219,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     try {
       debugPrint('🔍 [Home] Loading mentors from Supabase...');
       final response = await Supabase.instance.client
-          .from('mentor')
+          .from('mentors')
           .select()
           .order('rating', ascending: false)
           .limit(10);
@@ -277,6 +233,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
     } catch (e) {
       debugPrint('❌ [Home] Error loading mentors: $e');
+      debugPrint('❌ [Home] Error details: $e');
       // Keep the default mentors if loading fails
     }
   }
@@ -464,10 +421,14 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
         // Get Google profile photo if available
         final userMetadata = user.userMetadata;
-        if (userMetadata != null && userMetadata['avatar_url'] != null) {
-          setState(() {
-            _userPhotoUrl = userMetadata['avatar_url'];
-          });
+        debugPrint('🔍 [Home] Google User Metadata: $userMetadata');
+        if (userMetadata != null) {
+          final photoUrl = userMetadata['avatar_url'] ?? userMetadata['picture'];
+          if (photoUrl != null) {
+            setState(() {
+              _userPhotoUrl = photoUrl;
+            });
+          }
         }
 
         final response = await Supabase.instance.client
@@ -558,9 +519,21 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     Widget getBodyContent() {
       switch (_bottomNavIndex) {
         case 1: // Calendar Tab
-          return CalendarPage();
+          return CalendarPage(
+            onProfileClick: () {
+              setState(() {
+                _bottomNavIndex = 3;
+              });
+            },
+          );
         case 2: // Chat Tab
-          return ChatPage();
+          return ChatPage(
+            onProfileClick: () {
+              setState(() {
+                _bottomNavIndex = 3;
+              });
+            },
+          );
         case 3: // Profile Tab (placeholder)
           return _buildProfilePage();
         default: // Home Tab (case 0)
@@ -1025,15 +998,35 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       color: Color(0xFF5E9EF5),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Center(
-                      child: Text(
-                        _userInitial,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: _userPhotoUrl != null
+                          ? Image.network(
+                              _userPhotoUrl!,
+                              width: 40,
+                              height: 40,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => Center(
+                                child: Text(
+                                  _userInitial,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : Center(
+                              child: Text(
+                                _userInitial,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
                     ),
                   ),
                   SizedBox(width: 12),
@@ -1246,7 +1239,27 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: _userPhotoUrl != null 
-                          ? Image.network(_userPhotoUrl!, width: 42, height: 42, fit: BoxFit.cover)
+                          ? Image.network(
+                              _userPhotoUrl!, 
+                              width: 42, 
+                              height: 42, 
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => Container(
+                                width: 42,
+                                height: 42,
+                                color: Colors.white24,
+                                child: Center(
+                                  child: Text(
+                                    _userInitial, 
+                                    style: const TextStyle(
+                                      color: Colors.white, 
+                                      fontWeight: FontWeight.bold, 
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            )
                           : Container(
                               width: 42,
                               height: 42,
@@ -1311,7 +1324,19 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   subtitle: 'Get guidance from industry experts and professionals.',
                   image: 'assets/element1.png',
                   onTap: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const MentorConnectPage()));
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => MentorConnectPage(
+                          onProfileClick: () {
+                            Navigator.pop(context);
+                            setState(() {
+                              _bottomNavIndex = 3;
+                            });
+                          },
+                        ),
+                      ),
+                    );
                   },
                 ),
                 _buildModernBanner(
@@ -2953,15 +2978,31 @@ class MentorsSection extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Text(
+                  const Text(
                     'Recommended Mentors',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w500),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1B2347)),
                   ),
-                  SizedBox(width: 8),
-                  Icon(Icons.people, color: Colors.blue),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.people, color: Color(0xFF5E9EF5)),
                 ],
               ),
-              TextButton(onPressed: () {}, child: Text('View More')),
+              TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => MentorConnectPage(
+                        onProfileClick: () {
+                          Navigator.pop(context);
+                          // Since this widget is inside home.dart, we'll need to reach the home state.
+                          // But typically these buttons are just linked to navigation triggers.
+                        },
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('View More', style: TextStyle(color: Color(0xFF5E9EF5), fontWeight: FontWeight.bold)),
+              ),
             ],
           ),
           SizedBox(height: 16),
@@ -3238,8 +3279,11 @@ class _ProfilePageWidgetState extends State<_ProfilePageWidget> {
       if (user != null) {
         // Get Google profile photo if available
         final userMetadata = user.userMetadata;
-        if (userMetadata != null && userMetadata['avatar_url'] != null) {
-          _profilePhotoUrl = userMetadata['avatar_url'];
+        if (userMetadata != null) {
+          final photoUrl = userMetadata['avatar_url'] ?? userMetadata['picture'];
+          if (photoUrl != null) {
+            _profilePhotoUrl = photoUrl;
+          }
         }
 
         // Load user data from users table
@@ -3290,6 +3334,11 @@ class _ProfilePageWidgetState extends State<_ProfilePageWidget> {
                     ? DecorationImage(
                         image: NetworkImage(_profilePhotoUrl!),
                         fit: BoxFit.cover,
+                        onError: (exception, stackTrace) {
+                          setState(() {
+                            _profilePhotoUrl = null;
+                          });
+                        },
                       )
                     : null,
               ),

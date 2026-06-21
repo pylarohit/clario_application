@@ -1,13 +1,3 @@
-// ============================================================================
-// MENTOR CONNECT PAGE - Main entry point for connecting with mentors
-// ============================================================================
-// Features:
-// - Hero banner with promotional content
-// - Video section showcasing mentor introductions
-// - Searchable mentor grid with filtering
-// - Responsive design for mobile, tablet, and desktop
-// ============================================================================
-
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -16,7 +6,8 @@ import 'mentor_detail_page.dart';
 
 // Main StatefulWidget for Mentor Connect Page
 class MentorConnectPage extends StatefulWidget {
-  const MentorConnectPage({super.key});
+  final VoidCallback? onProfileClick;
+  const MentorConnectPage({super.key, this.onProfileClick});
 
   @override
   State<MentorConnectPage> createState() => _MentorConnectPageState();
@@ -30,6 +21,7 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
   List<Map<String, dynamic>> _filteredMentors =
       []; // Filtered mentors based on search
   List<Map<String, dynamic>> _mentorVideos = []; // Mentors with video content
+  String? _userPhotoUrl;
 
   // Loading states
   bool _isLoading = true; // Loading state for mentor list
@@ -56,11 +48,29 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
     super.initState();
     _pageController = PageController(); // Initialize carousel controller
     _loadData(); // Load all data when page opens
+    _loadUserProfile(); // Load user profile metadata (Google photos / picture)
   }
 
   // Load mentors and videos in parallel for better performance
   Future<void> _loadData() async {
     await Future.wait([_loadMentors(), _loadMentorVideos()]);
+  }
+
+  Future<void> _loadUserProfile() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        final userMetadata = user.userMetadata;
+        if (userMetadata != null) {
+          final photoUrl = userMetadata['avatar_url'] ?? userMetadata['picture'];
+          if (photoUrl != null) {
+            setState(() => _userPhotoUrl = photoUrl);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading user profile: $e');
+    }
   }
 
   @override
@@ -99,7 +109,7 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to load mentors. Please try again.'),
+            content: const Text('Failed to load mentors. Please try again.'),
             action: SnackBarAction(label: 'Retry', onPressed: _loadMentors),
           ),
         );
@@ -136,6 +146,7 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
         });
       }
     } catch (e) {
+      debugPrint('⚠️ Error loading mentor videos (column might not exist): $e');
       if (mounted) {
         setState(() => _isLoadingVideos = false);
       }
@@ -188,9 +199,9 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Color(0xFF5E9EF5).withValues(alpha: 0.3),
+            color: const Color(0xFF5E9EF5).withValues(alpha: 0.3),
             blurRadius: 30,
-            offset: Offset(0, 15),
+            offset: const Offset(0, 15),
           ),
         ],
       ),
@@ -198,12 +209,12 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
         controller: _pageController,
         children: [
           _buildBannerPage(
-            gradient: [Color(0xFFE8C5E8), Color(0xFFE8C5E8)],
+            gradient: [const Color(0xFFE8C5E8), const Color(0xFFE8C5E8)],
             title: 'Manage all your Bookings Here ',
             subtitle:
                 'Manage all your Bookings and get Insights on your progress.',
             imagePath: 'assets/element3.png',
-            buttonColor: Color(0xFFE673E6),
+            buttonColor: const Color(0xFFE673E6),
           ),
         ],
       ),
@@ -237,7 +248,7 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
                   children: [
                     // White background layer
                     Container(
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.only(
                           topLeft: Radius.circular(24),
@@ -261,7 +272,7 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
                             ],
                             radius: 0.8,
                           ),
-                          borderRadius: BorderRadius.only(
+                          borderRadius: const BorderRadius.only(
                             topLeft: Radius.circular(24),
                           ),
                         ),
@@ -284,7 +295,7 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
                               style: GoogleFonts.inter(
                                 fontSize: isMobile ? 14 : 18,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF1B1B1B),
+                                color: const Color(0xFF1B1B1B),
                                 height: 1.3,
                                 letterSpacing: -0.2,
                               ),
@@ -299,7 +310,7 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
                               subtitle,
                               style: GoogleFonts.inter(
                                 fontSize: isMobile ? 10 : 12,
-                                color: Color(0xFF3B3B3B),
+                                color: const Color(0xFF3B3B3B),
                                 height: 1.4,
                               ),
                               maxLines: 2,
@@ -323,7 +334,7 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               elevation: 0,
-                              minimumSize: Size(0, 0),
+                              minimumSize: Size.zero,
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
                             child: Row(
@@ -357,7 +368,7 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
                 child: Container(
                   decoration: BoxDecoration(
                     color: gradient[0], // Colored background
-                    borderRadius: BorderRadius.only(
+                    borderRadius: const BorderRadius.only(
                       topRight: Radius.circular(24),
                       bottomRight: Radius.circular(24),
                     ),
@@ -367,7 +378,7 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
                       // Background pattern layer
                       Positioned.fill(
                         child: ClipRRect(
-                          borderRadius: BorderRadius.only(
+                          borderRadius: const BorderRadius.only(
                             topRight: Radius.circular(24),
                             bottomRight: Radius.circular(24),
                           ),
@@ -375,14 +386,14 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
                             'assets/static5.png', // Pattern background
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) {
-                              return SizedBox.shrink();
+                              return const SizedBox.shrink();
                             },
                           ),
                         ),
                       ),
                       // Foreground image layer
                       ClipRRect(
-                        borderRadius: BorderRadius.only(
+                        borderRadius: const BorderRadius.only(
                           topRight: Radius.circular(24),
                           bottomRight: Radius.circular(24),
                         ),
@@ -432,21 +443,21 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
             children: [
               Icon(
                 Icons.person_search,
-                color: Color(0xFF5E9EF5),
+                color: const Color(0xFF5E9EF5),
                 size: isMobile ? 20 : 24,
               ),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Text(
                 'Discover Mentors',
                 style: GoogleFonts.inter(
                   fontSize: isMobile ? 18 : 22,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF1B2347),
+                  color: const Color(0xFF1B2347),
                 ),
               ),
             ],
           ),
-          SizedBox(height: 12),
+          const SizedBox(height: 12),
 
           // Dynamic content based on loading state
           _isLoadingVideos
@@ -490,7 +501,7 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.video_library_outlined, size: 40, color: Colors.grey[400]),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             'No mentor videos available yet',
             style: GoogleFonts.inter(fontSize: 13, color: Colors.grey[600]),
@@ -545,20 +556,52 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
         title: Text(
           'Mentor Connect',
           style: GoogleFonts.inter(
-            color: Color(0xFF1B2347),
+            color: const Color(0xFF1B2347),
             fontWeight: FontWeight.bold,
             fontSize: isMobile ? 18 : 20,
           ),
         ),
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Color(0xFF1B2347)),
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF1B2347)),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          if (widget.onProfileClick != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: GestureDetector(
+                onTap: widget.onProfileClick,
+                child: CircleAvatar(
+                  radius: 18,
+                  backgroundColor: const Color(0xFF5E9EF5),
+                  backgroundImage: _userPhotoUrl != null ? NetworkImage(_userPhotoUrl!) : null,
+                  onBackgroundImageError: _userPhotoUrl != null
+                      ? (exception, stackTrace) {
+                          setState(() {
+                            _userPhotoUrl = null;
+                          });
+                        }
+                      : null,
+                  child: _userPhotoUrl == null
+                      ? Text(
+                          Supabase.instance.client.auth.currentUser?.userMetadata?['full_name']?.substring(0, 1).toUpperCase() ?? 
+                          Supabase.instance.client.auth.currentUser?.email?.substring(0, 1).toUpperCase() ?? 'U',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        )
+                      : null,
+                ),
+              ),
+            ),
+        ],
       ),
       // ===== MAIN BODY =====
       body: RefreshIndicator(
         onRefresh: _loadData, // Pull-to-refresh functionality
-        color: Color(0xFF5E9EF5),
+        color: const Color(0xFF5E9EF5),
         child: CustomScrollView(
           controller: _scrollController,
           slivers: [
@@ -566,19 +609,19 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
             SliverToBoxAdapter(
               child: Column(
                 children: [
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   _buildHeroBanner(isMobile),
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                 ],
               ),
             ),
 
-            // ===== SECTION 2: Discover Mentors Videos =====            // ===== SECTION 2: Discover Mentors Videos =====
+            // ===== SECTION 2: Discover Mentors Videos =====
             SliverToBoxAdapter(
               child: Column(
                 children: [
                   _buildDiscoverMentorsSection(screenWidth),
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                 ],
               ),
             ),
@@ -602,33 +645,33 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
                           style: GoogleFonts.inter(
                             fontSize: isMobile ? 18 : 20,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF1B2347),
+                            color: const Color(0xFF1B2347),
                           ),
                         ),
-                        SizedBox(width: 8),
+                        const SizedBox(width: 8),
                         Icon(
                           Icons.school,
-                          color: Color(0xFF5E9EF5),
+                          color: const Color(0xFF5E9EF5),
                           size: isMobile ? 20 : 24,
                         ),
                       ],
                     ),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
 
                     // Search bar and bookings button
                     _buildSearchAndFilterRow(isMobile),
-                    SizedBox(height: 12),
+                    const SizedBox(height: 12),
 
                     // Results counter
                     Text(
                       '${_filteredMentors.length} ${_filteredMentors.length == 1 ? 'Mentor' : 'Mentors'} Found',
                       style: GoogleFonts.inter(
                         fontSize: 14,
-                        color: Color(0xFFFF9800),
+                        color: const Color(0xFFFF9800),
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    SizedBox(height: 8),
+                    const SizedBox(height: 8),
                   ],
                 ),
               ),
@@ -669,19 +712,19 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
                 borderRadius: BorderRadius.circular(8),
                 borderSide: BorderSide.none,
               ),
-              contentPadding: EdgeInsets.symmetric(
+              contentPadding: const EdgeInsets.symmetric(
                 horizontal: 16,
                 vertical: 12,
               ),
             ),
           ),
         ),
-        SizedBox(width: 12),
+        const SizedBox(width: 12),
         // My Bookings Button
         ElevatedButton.icon(
           onPressed: () {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
+              const SnackBar(
                 content: Text('My Bookings - Coming Soon'),
                 behavior: SnackBarBehavior.floating,
               ),
@@ -693,7 +736,7 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
             style: GoogleFonts.inter(fontSize: isMobile ? 12 : 14),
           ),
           style: ElevatedButton.styleFrom(
-            backgroundColor: Color(0xFF5E9EF5),
+            backgroundColor: const Color(0xFF5E9EF5),
             foregroundColor: Colors.white,
             elevation: 0,
             padding: EdgeInsets.symmetric(
@@ -720,8 +763,8 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(color: Color(0xFF5E9EF5)),
-              SizedBox(height: 16),
+              const CircularProgressIndicator(color: Color(0xFF5E9EF5)),
+              const SizedBox(height: 16),
               Text(
                 'Loading mentors...',
                 style: GoogleFonts.inter(fontSize: 14, color: Colors.grey[600]),
@@ -739,7 +782,7 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               Text(
                 _searchQuery.isEmpty
                     ? 'No mentors available'
@@ -751,7 +794,7 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
                 ),
               ),
               if (_searchQuery.isNotEmpty) ...[
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
                   'Try a different search term',
                   style: GoogleFonts.inter(
@@ -812,145 +855,125 @@ class _MentorConnectPageState extends State<MentorConnectPage> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-            Expanded(
-              flex: 2,
-              child: ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(24),
-                  topLeft: Radius.circular(24),
-                ),
-                child: (mentor['avatar'] != null && mentor['avatar'].toString().isNotEmpty)
-                    ? Image.network(
-                        mentor['avatar'].toString(),
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
+              Expanded(
+                flex: 2,
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(24),
+                    topLeft: Radius.circular(24),
+                  ),
+                  child: (mentor['avatar'] != null && mentor['avatar'].toString().isNotEmpty)
+                      ? Image.network(
+                          mentor['avatar'].toString(),
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Container(
+                            color: Colors.grey[100],
+                            child: const Icon(Icons.person, size: 40, color: Colors.grey),
+                          ),
+                        )
+                      : Container(
                           color: Colors.grey[100],
                           child: const Icon(Icons.person, size: 40, color: Colors.grey),
                         ),
-                      )
-                    : Container(
-                        color: Colors.grey[100],
-                        child: const Icon(Icons.person, size: 40, color: Colors.grey),
-                      ),
-              ),
-            ),
-            // Right Side: Info and Actions
-            Expanded(
-              flex: 3,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            name,
-                            style: GoogleFonts.inter(
-                              fontSize: isMobile ? 15 : 17,
-                              fontWeight: FontWeight.w900,
-                              color: const Color(0xFF1E293B),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Text('🇬🇧', style: TextStyle(fontSize: 14)),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      position,
-                      style: GoogleFonts.inter(
-                        fontSize: isMobile ? 10 : 11,
-                        color: Colors.grey[500],
-                        fontWeight: FontWeight.w500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Helping with:',
-                      style: GoogleFonts.inter(
-                        fontSize: 10,
-                        color: Colors.grey[400],
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    // Expertise Chips
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: expertise.take(2).map((item) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[100],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            item.toString(),
-                            style: GoogleFonts.inter(
-                              fontSize: 9,
-                              color: const Color(0xFF1E293B),
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                    const Spacer(),
-                    // Action Button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () => _showConnectDialog(mentor),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF5367FF),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: Text(
-                          'Connect',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-  Widget _buildProfileAvatar(Map<String, dynamic> mentor, bool isMobile) {
-    // Keep internal helper to prevent build errors elsewhere, though not used in row design
-    return const SizedBox.shrink();
-  }
-
-  Widget _buildAvatarFallback(String initial, double radius) {
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: Colors.grey[200],
-      child: Text(
-        initial,
-        style: GoogleFonts.inter(
-          fontSize: radius * 0.8,
-          fontWeight: FontWeight.bold,
-          color: Colors.grey[700],
+              // Right Side: Info and Actions
+              Expanded(
+                flex: 3,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              name,
+                              style: GoogleFonts.inter(
+                                fontSize: isMobile ? 15 : 17,
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFF1E293B),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Text('🇬🇧', style: TextStyle(fontSize: 14)),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        position,
+                        style: GoogleFonts.inter(
+                          fontSize: isMobile ? 10 : 11,
+                          color: Colors.grey[500],
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Helping with:',
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          color: Colors.grey[400],
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      // Expertise Chips
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: expertise.take(2).map((item) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              item.toString(),
+                              style: GoogleFonts.inter(
+                                fontSize: 9,
+                                color: const Color(0xFF1E293B),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const Spacer(),
+                      // Action Button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () => _showConnectDialog(mentor),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF5367FF),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: Text(
+                            'Connect',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1058,7 +1081,7 @@ class _AutoPlayVideoThumbnailState extends State<AutoPlayVideoThumbnail> {
     setState(() => _showControls = !_showControls);
 
     if (_showControls) {
-      Future.delayed(Duration(seconds: 3), () {
+      Future.delayed(const Duration(seconds: 3), () {
         if (mounted && _showControls) {
           setState(() => _showControls = false);
         }
@@ -1112,7 +1135,7 @@ class _AutoPlayVideoThumbnailState extends State<AutoPlayVideoThumbnail> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.error_outline, size: 40, color: Colors.grey[600]),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text(
               'Video unavailable',
               style: GoogleFonts.inter(color: Colors.grey[600], fontSize: 12),
@@ -1126,7 +1149,7 @@ class _AutoPlayVideoThumbnailState extends State<AutoPlayVideoThumbnail> {
   Widget _buildLoadingState() {
     return Container(
       color: Colors.grey[200],
-      child: Center(
+      child: const Center(
         child: CircularProgressIndicator(
           strokeWidth: 3,
           valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF5E9EF5)),
@@ -1149,7 +1172,7 @@ class _AutoPlayVideoThumbnailState extends State<AutoPlayVideoThumbnail> {
                     : Icons.play_arrow,
                 onTap: _togglePlayPause,
               ),
-              SizedBox(width: 16),
+              const SizedBox(width: 16),
               _buildControlButton(
                 icon: _controller!.value.volume == 0.0
                     ? Icons.volume_off
@@ -1171,7 +1194,7 @@ class _AutoPlayVideoThumbnailState extends State<AutoPlayVideoThumbnail> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(30),
       child: Container(
-        padding: EdgeInsets.all(12),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.9),
           shape: BoxShape.circle,
@@ -1179,11 +1202,11 @@ class _AutoPlayVideoThumbnailState extends State<AutoPlayVideoThumbnail> {
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.2),
               blurRadius: 8,
-              offset: Offset(0, 2),
+              offset: const Offset(0, 2),
             ),
           ],
         ),
-        child: Icon(icon, color: Color(0xFF5E9EF5), size: 28),
+        child: Icon(icon, color: const Color(0xFF5E9EF5), size: 28),
       ),
     );
   }
@@ -1194,7 +1217,7 @@ class _AutoPlayVideoThumbnailState extends State<AutoPlayVideoThumbnail> {
       left: 8,
       right: 8,
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.6),
           borderRadius: BorderRadius.circular(6),

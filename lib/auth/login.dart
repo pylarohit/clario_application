@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -158,12 +158,12 @@ class _LoginPageState extends State<LoginPage>
 
   // ─── OAuth Handler ────────────────────────────────────────────────────────
  
- Future<void> handleLogin(OAuthProvider provider) async {
+  Future<void> handleLogin(OAuthProvider provider) async {
     setState(() => loading = true);
     try {
       final result = await Supabase.instance.client.auth.signInWithOAuth(
         provider,
-        redirectTo: 'io.supabase.flutter://login-callback',
+        redirectTo: kIsWeb ? Uri.base.origin : 'io.supabase.flutter://login-callback',
       );
       if (!result) {
         throw Exception('OAuth sign in was cancelled or failed');

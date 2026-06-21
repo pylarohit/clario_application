@@ -1,26 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:file_picker/file_picker.dart';
 
 class ChatPage extends StatefulWidget {
-  const ChatPage({super.key});
+  final VoidCallback? onProfileClick;
+  const ChatPage({super.key, this.onProfileClick});
 
   @override
   State<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _ChatPageState extends State<ChatPage> {
   final TextEditingController _searchController = TextEditingController();
   final _supabase = Supabase.instance.client;
-  
   Stream<List<Map<String, dynamic>>>? _roomsStream;
+  String? _userPhotoUrl;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _setupRoomsStream();
+    _loadUserProfile();
+  }
+
+  Future<void> _loadUserProfile() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        final userMetadata = user.userMetadata;
+        if (userMetadata != null) {
+          final photoUrl = userMetadata['avatar_url'] ?? userMetadata['picture'];
+          if (photoUrl != null) {
+            setState(() => _userPhotoUrl = photoUrl);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading user profile: $e');
+    }
   }
 
   void _setupRoomsStream() {
@@ -36,369 +55,296 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
 
   @override
   void dispose() {
-    _tabController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFB1A9DE), // Lavender Background
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: _roomsStream,
+        builder: (context, snapshot) {
+          final rooms = snapshot.data ?? [];
+          final bool isLoading = snapshot.connectionState == ConnectionState.waiting;
+          
+          return Column(
+            children: [
+              _buildTopBar(),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(45)),
+                  ),
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 30),
+                        _buildHeaderRow(),
+                        const SizedBox(height: 30),
+                        _buildActivitiesSection(rooms),
+                        const SizedBox(height: 30),
+                        _buildMessagesSection(rooms, isLoading),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTopBar() {
+    return Container(
+      padding: const EdgeInsets.only(top: 50, left: 24, right: 24, bottom: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const SizedBox(width: 40), // Placeholder to balance
+          GestureDetector(
+            onTap: () => widget.onProfileClick?.call(),
+            child: CircleAvatar(
+              radius: 18,
+              backgroundColor: const Color(0xFF5E9EF5),
+              backgroundImage: _userPhotoUrl != null ? NetworkImage(_userPhotoUrl!) : null,
+              onBackgroundImageError: _userPhotoUrl != null
+                  ? (exception, stackTrace) {
+                      setState(() {
+                        _userPhotoUrl = null;
+                      });
+                    }
+                  : null,
+              child: _userPhotoUrl == null
+                  ? Text(
+                      _supabase.auth.currentUser?.email?.substring(0, 1).toUpperCase() ?? 'U',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    )
+                  : null,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderRow() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Chat',
+            style: GoogleFonts.outfit(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF1B2347),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFB1A9DE).withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.search, color: Color(0xFF6B4EE0), size: 24),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActivitiesSection(List<Map<String, dynamic>> rooms) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildHeader(),
-        _buildSearchBar(),
-        _buildTabs(),
-        Expanded(child: _buildChatList()),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Text(
+            'Activities',
+            style: GoogleFonts.outfit(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF1B2347),
+            ),
+          ),
+        ),
+        const SizedBox(height: 15),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Row(
+            children: rooms.map((room) {
+              return Padding(
+                padding: const EdgeInsets.only(right: 20),
+                child: Container(
+                  width: 68,
+                  height: 68,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFF6B4EE0), width: 2.5),
+                  ),
+                  padding: const EdgeInsets.all(2),
+                  child: CircleAvatar(
+                    backgroundImage: NetworkImage(room['mentor_avatar'] ?? 'https://i.pravatar.cc/150?u=chat'),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildHeader() {
-    return Container(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF5E9EF5), Color(0xFF1B2347)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Messages',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'Chat with your mentors',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.white70,
-                  ),
-                ),
-              ],
+  Widget _buildMessagesSection(List<Map<String, dynamic>> rooms, bool isLoading) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Text(
+            'Messages',
+            style: GoogleFonts.outfit(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF1B2347),
             ),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: IconButton(
-                icon: Icon(Icons.edit_square, color: Colors.white),
-                onPressed: () {
-                  _showNewChatDialog();
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSearchBar() {
-    return Container(
-      padding: EdgeInsets.all(16),
-      color: Colors.white,
-      child: TextField(
-        controller: _searchController,
-        decoration: InputDecoration(
-          hintText: 'Search messages...',
-          prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
-          suffixIcon: _searchController.text.isNotEmpty
-              ? IconButton(
-                  icon: Icon(Icons.clear, color: Colors.grey[600]),
-                  onPressed: () {
-                    setState(() {
-                      _searchController.clear();
-                    });
-                  },
-                )
-              : null,
-          filled: true,
-          fillColor: Colors.grey[100],
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
           ),
-          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         ),
-        onChanged: (value) {
-          setState(() {});
-        },
-      ),
-    );
-  }
-
-  Widget _buildTabs() {
-    return Container(
-      color: Colors.white,
-      child: TabBar(
-        controller: _tabController,
-        indicatorColor: Color(0xFF5E9EF5),
-        labelColor: Color(0xFF5E9EF5),
-        unselectedLabelColor: Colors.grey[600],
-        labelStyle: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-        tabs: [
-          Tab(text: 'All Chats'),
-          Tab(text: 'Unread'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChatList() {
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _roomsStream,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        
-        final rooms = snapshot.data ?? [];
-        
-        return Container(
-          color: const Color(0xFFF5F7FA),
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildConversationList(rooms),
-              _buildConversationList(
-                rooms.where((room) => (room['unread_count'] ?? 0) > 0).toList(),
+        const SizedBox(height: 10),
+        if (isLoading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: CircularProgressIndicator(color: Color(0xFF6B4EE0))),
+          )
+        else if (rooms.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 40),
+            child: Center(
+              child: Text(
+                'No messages yet',
+                style: GoogleFonts.outfit(color: Colors.black38),
               ),
-            ],
+            ),
+          )
+        else
+          ListView.separated(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: rooms.length,
+            separatorBuilder: (context, index) => Padding(
+              padding: const EdgeInsets.only(left: 100, right: 24),
+              child: Divider(color: Colors.grey.withOpacity(0.1), thickness: 1),
+            ),
+            itemBuilder: (context, index) => _buildChatItem(rooms[index]),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildChatItem(Map<String, dynamic> room) {
+    // Calculate relative time
+    String timeAgo = 'Now';
+    if (room['updated_at'] != null) {
+      final updated = DateTime.parse(room['updated_at']);
+      final diff = DateTime.now().difference(updated);
+      if (diff.inMinutes < 1) {
+        timeAgo = 'Now';
+      } else if (diff.inMinutes < 60) {
+        timeAgo = '${diff.inMinutes} min';
+      } else if (diff.inHours < 24) {
+        timeAgo = '${diff.inHours} hr';
+      } else {
+        timeAgo = '${diff.inDays} d';
+      }
+    }
+
+    final int unreadCount = room['unread_count'] ?? 0;
+
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ChatDetailPage(
+              roomId: room['id'],
+              mentorName: room['mentor_name'] ?? 'Mentor',
+              mentorPosition: room['mentor_position'] ?? 'Expert',
+              mentorAvatar: room['mentor_avatar'] ?? 'https://i.pravatar.cc/150?u=chat',
+              isOnline: room['is_online'] ?? false,
+            ),
           ),
         );
       },
-    );
-  }
-
-  Widget _buildConversationList(List<Map<String, dynamic>> conversations) {
-    if (conversations.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        child: Row(
           children: [
-            Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey[400]),
-            SizedBox(height: 16),
-            Text(
-              'No conversations yet',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
-              ),
+            CircleAvatar(
+              radius: 32,
+              backgroundImage: NetworkImage(room['mentor_avatar'] ?? 'https://i.pravatar.cc/150?u=chat'),
             ),
-            SizedBox(height: 8),
-            Text(
-              'Start chatting with mentors',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[500],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: EdgeInsets.only(top: 8, bottom: 80),
-      itemCount: conversations.length,
-      itemBuilder: (context, index) {
-        return _buildConversationItem(conversations[index]);
-      },
-    );
-  }
-
-  Widget _buildConversationItem(Map<String, dynamic> conversation) {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ChatDetailPage(
-                roomId: conversation['id'],
-                mentorName: conversation['mentor_name'] ?? 'Mentor',
-                mentorPosition: conversation['mentor_position'] ?? 'Expert',
-                mentorAvatar: conversation['mentor_avatar'] ?? 'assets/a1.png',
-                isOnline: conversation['is_online'] ?? false,
-              ),
-            ),
-          );
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: EdgeInsets.all(12),
-          child: Row(
-            children: [
-              // Avatar with online indicator
-              Stack(
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  CircleAvatar(
-                    radius: 28,
-                    backgroundImage: AssetImage(conversation['mentor_avatar'] ?? 'assets/a1.png'),
-                  ),
-                  if (conversation['is_online'] == true)
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF4CAF50),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                      ),
+                  Text(
+                    room['mentor_name'] ?? 'Unknown',
+                    style: GoogleFonts.outfit(
+                      color: const Color(0xFF6B4EE0),
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    room['last_message'] ?? 'Start a conversation',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.outfit(
+                      color: Colors.black45,
+                      fontSize: 14,
+                    ),
+                  ),
                 ],
               ),
-              SizedBox(width: 12),
-              
-              // Conversation details
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            conversation['mentor_name'] ?? 'Mentor',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1B2347),
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Text(
-                          conversation['updated_at'] != null 
-                            ? DateFormat.jm().format(DateTime.parse(conversation['updated_at']))
-                            : '',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      conversation['mentor_position'] ?? 'Expert',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF5E9EF5),
-                      ),
-                    ),
-                    SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            conversation['last_message'] ?? 'No messages yet',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: (conversation['unread_count'] ?? 0) > 0
-                                  ? const Color(0xFF1B2347)
-                                  : Colors.grey[600],
-                              fontWeight: (conversation['unread_count'] ?? 0) > 0
-                                  ? FontWeight.w500
-                                  : FontWeight.normal,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if ((conversation['unread_count'] ?? 0) > 0)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF5E9EF5),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              '${conversation['unread_count']}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showNewChatDialog() {
-    showModalBottomSheet(
-      context: context,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Container(
-        padding: EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Start New Chat',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1B2347),
-              ),
             ),
-            SizedBox(height: 20),
-            ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Color(0xFF5E9EF5).withValues(alpha: 0.1),
-                child: Icon(Icons.search, color: Color(0xFF5E9EF5)),
-              ),
-              title: Text('Find a Mentor'),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Navigate to mentor search')),
-                );
-              },
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  timeAgo,
+                  style: GoogleFonts.outfit(color: Colors.black38, fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                if (unreadCount > 0)
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF6B4EE0),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      unreadCount.toString(),
+                      style: GoogleFonts.outfit(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+              ],
             ),
           ],
         ),
@@ -407,7 +353,8 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
   }
 }
 
-// Chat Detail Page
+// ... rest of file (ChatDetailPage)
+
 class ChatDetailPage extends StatefulWidget {
   final String roomId;
   final String mentorName;
@@ -415,14 +362,7 @@ class ChatDetailPage extends StatefulWidget {
   final String mentorAvatar;
   final bool isOnline;
 
-  const ChatDetailPage({
-    super.key,
-    required this.roomId,
-    required this.mentorName,
-    required this.mentorPosition,
-    required this.mentorAvatar,
-    required this.isOnline,
-  });
+  const ChatDetailPage({super.key, required this.roomId, required this.mentorName, required this.mentorPosition, required this.mentorAvatar, required this.isOnline});
 
   @override
   State<ChatDetailPage> createState() => _ChatDetailPageState();
@@ -430,325 +370,247 @@ class ChatDetailPage extends StatefulWidget {
 
 class _ChatDetailPageState extends State<ChatDetailPage> {
   final TextEditingController _messageController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
   final _supabase = Supabase.instance.client;
-  
-  Stream<List<Map<String, dynamic>>>? _messagesStream;
+  String? _userPhotoUrl;
 
   @override
   void initState() {
     super.initState();
-    _setupMessagesStream();
+    _loadUserProfile();
   }
 
-  void _setupMessagesStream() {
-    _messagesStream = _supabase
-        .from('messages')
-        .stream(primaryKey: ['id'])
-        .eq('room_id', widget.roomId)
-        .order('created_at', ascending: false);
-  }
-
-  @override
-  void dispose() {
-    _messageController.dispose();
-    _scrollController.dispose();
-    super.dispose();
+  Future<void> _loadUserProfile() async {
+    final user = _supabase.auth.currentUser;
+    if (user != null && user.userMetadata != null) {
+      final photoUrl = user.userMetadata!['avatar_url'] ?? user.userMetadata!['picture'];
+      if (photoUrl != null) {
+        setState(() => _userPhotoUrl = photoUrl);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFFF5F7FA),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 2,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Color(0xFF1B2347)),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Row(
-          children: [
-            Stack(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundImage: AssetImage(widget.mentorAvatar),
-                ),
-                if (widget.isOnline)
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: Color(0xFF4CAF50),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.mentorName,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1B2347),
-                    ),
-                  ),
-                  Text(
-                    widget.isOnline ? 'Online' : 'Offline',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: widget.isOnline ? Color(0xFF4CAF50) : Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.videocam, color: Color(0xFF5E9EF5)),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Video call feature coming soon')),
-              );
-            },
-          ),
-          IconButton(
-            icon: Icon(Icons.more_vert, color: Color(0xFF1B2347)),
-            onPressed: () {},
-          ),
-        ],
-      ),
+      backgroundColor: Colors.white,
       body: Column(
         children: [
+          _buildHeader(),
           Expanded(
             child: StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _messagesStream,
+              stream: _supabase.from('messages').stream(primaryKey: ['id']).eq('room_id', widget.roomId).order('created_at', ascending: false),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final messages = snapshot.data ?? [];
-                
-                // Scroll to bottom when new messages arrive
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (_scrollController.hasClients) {
-                    _scrollController.animateTo(
-                      _scrollController.position.maxScrollExtent,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                    );
-                  }
-                });
-
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFF6B4EE0)));
+                final messages = snapshot.data!;
                 return ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  reverse: true, // Show newest at the bottom
+                  reverse: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final msg = messages[index];
-                    return _buildMessageBubble({
-                      'text': msg['text'],
-                      'isMe': msg['sender_id'] == _supabase.auth.currentUser?.id,
-                      'time': DateFormat.jm().format(DateTime.parse(msg['created_at'])),
-                    });
+                    final isMe = msg['sender_id'] == _supabase.auth.currentUser?.id;
+                    return _buildModernBubble(msg, isMe);
                   },
                 );
               },
             ),
           ),
-          _buildMessageInput(),
+          _buildInputPill(),
         ],
       ),
     );
   }
 
-  Widget _buildMessageBubble(Map<String, dynamic> message) {
-    final isMe = message['isMe'];
-    return Padding(
-      padding: EdgeInsets.only(bottom: 12),
-      child: Row(
-        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (!isMe) ...[
-            CircleAvatar(
-              radius: 16,
-              backgroundImage: AssetImage(widget.mentorAvatar),
-            ),
-            SizedBox(width: 8),
-          ],
-          Container(
-            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: isMe ? Color(0xFF5E9EF5) : Colors.white,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(16),
-                bottomLeft: Radius.circular(isMe ? 16 : 4),
-                bottomRight: Radius.circular(isMe ? 4 : 16),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 5,
-                  offset: Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  message['text'],
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: isMe ? Colors.white : Color(0xFF1B2347),
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  message['time'],
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isMe ? Colors.white.withValues(alpha: 0.8) : Colors.grey[600],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildMessageInput() {
+
+  Widget _buildHeader() {
     return Container(
-      padding: EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: Offset(0, -2),
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        color: Color(0xFF6B4EE0),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(40)),
+      ),
+      padding: const EdgeInsets.only(top: 50, bottom: 24, left: 16, right: 16),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+            onPressed: () => Navigator.pop(context),
+          ),
+          const SizedBox(width: 8),
+          CircleAvatar(
+            radius: 22,
+            backgroundImage: NetworkImage(widget.mentorAvatar),
+          ),
+          const SizedBox(width: 14),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                widget.mentorName,
+                style: GoogleFonts.outfit(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                'Online',
+                style: GoogleFonts.outfit(color: Colors.white.withOpacity(0.7), fontSize: 13),
+              ),
+            ],
           ),
         ],
       ),
-      child: SafeArea(
+    );
+  }
+
+  Widget _buildModernBubble(Map<String, dynamic> msg, bool isMe) {
+    final String time = msg['created_at'] != null ? DateFormat.jm().format(DateTime.parse(msg['created_at'])) : '';
+    final String text = msg['text'] ?? '';
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (!isMe)
+                CircleAvatar(radius: 16, backgroundImage: NetworkImage(widget.mentorAvatar)),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: isMe ? const Color(0xFF6B4EE0) : const Color(0xFFE8EAF6),
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(20),
+                      topRight: const Radius.circular(20),
+                      bottomLeft: isMe ? const Radius.circular(20) : const Radius.circular(4),
+                      bottomRight: isMe ? const Radius.circular(4) : const Radius.circular(20),
+                    ),
+                  ),
+                  child: Text(
+                    text,
+                    style: GoogleFonts.outfit(color: isMe ? Colors.white : const Color(0xFF1B2347), fontSize: 15),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (isMe)
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: const Color(0xFF5E9EF5),
+                  backgroundImage: _userPhotoUrl != null ? NetworkImage(_userPhotoUrl!) : null,
+                  onBackgroundImageError: _userPhotoUrl != null
+                      ? (exception, stackTrace) {
+                          setState(() {
+                            _userPhotoUrl = null;
+                          });
+                        }
+                      : null,
+                  child: _userPhotoUrl == null
+                      ? Text(
+                          _supabase.auth.currentUser?.email?.substring(0, 1).toUpperCase() ?? 'U',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                          ),
+                        )
+                      : null,
+                ),
+            ],
+          ),
+          Padding(
+            padding: EdgeInsets.only(top: 4, left: isMe ? 0 : 50, right: isMe ? 50 : 0),
+            child: Row(
+              mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+              children: [
+                if (isMe) const Icon(Icons.done_all, size: 14, color: Color(0xFF6B4EE0)),
+                const SizedBox(width: 4),
+                Text(time, style: GoogleFonts.outfit(color: Colors.black38, fontSize: 11)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInputPill() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
+      color: Colors.white,
+      child: Container(
+        height: 56,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: const Color(0xFFEEEEEE), width: 1.5),
+        ),
         child: Row(
           children: [
-            IconButton(
-              icon: Icon(Icons.add_circle_outline, color: Color(0xFF5E9EF5)),
-              onPressed: () {
-                _showAttachmentOptions();
+            GestureDetector(
+              onTap: () async {
+                final result = await FilePicker.platform.pickFiles();
+                if (result != null && result.files.single.name != null) {
+                  final fileName = result.files.single.name;
+                  final now = DateTime.now().toIso8601String();
+                  
+                  // 1. Insert message
+                  await _supabase.from('messages').insert({
+                    'room_id': widget.roomId,
+                    'sender_id': _supabase.auth.currentUser?.id,
+                    'text': 'Attachment: $fileName',
+                    'created_at': now,
+                  });
+
+                  // 2. Update room summary
+                  await _supabase.from('chat_rooms').update({
+                    'last_message': 'Attachment: $fileName',
+                    'updated_at': now,
+                  }).eq('id', widget.roomId);
+                }
               },
+              child: const Icon(Icons.attach_file, color: Colors.black26, size: 20),
             ),
+            const SizedBox(width: 12),
             Expanded(
               child: TextField(
                 controller: _messageController,
+                style: GoogleFonts.outfit(fontSize: 15),
                 decoration: InputDecoration(
-                  hintText: 'Type a message...',
-                  filled: true,
-                  fillColor: Colors.grey[100],
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  hintText: 'Enter Message',
+                  hintStyle: GoogleFonts.outfit(color: Colors.black26),
+                  border: InputBorder.none,
                 ),
-                maxLines: null,
               ),
             ),
-            SizedBox(width: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: Color(0xFF5E9EF5),
-                shape: BoxShape.circle,
-              ),
-              child: IconButton(
-                icon: const Icon(Icons.send, color: Colors.white),
-                onPressed: () async {
-                  final text = _messageController.text.trim();
-                  if (text.isNotEmpty) {
-                    _messageController.clear();
-                    try {
-                      final userId = _supabase.auth.currentUser?.id;
-                      await _supabase.from('messages').insert({
-                        'room_id': widget.roomId,
-                        'sender_id': userId,
-                        'text': text,
-                        'created_at': DateTime.now().toIso8601String(),
-                      });
-                      
-                      // Update room's last message
-                      await _supabase.from('chat_rooms').update({
-                        'last_message': text,
-                        'updated_at': DateTime.now().toIso8601String(),
-                      }).eq('id', widget.roomId);
-                    } catch (e) {
-                      debugPrint('❌ Error sending message: $e');
-                    }
-                  }
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+            const SizedBox(width: 12),
+            GestureDetector(
+              onTap: () async {
+                final txt = _messageController.text.trim();
+                if (txt.isEmpty) return;
+                _messageController.clear();
+                
+                final now = DateTime.now().toIso8601String();
+                
+                // 1. Insert message
+                await _supabase.from('messages').insert({
+                  'room_id': widget.roomId,
+                  'sender_id': _supabase.auth.currentUser?.id,
+                  'text': txt,
+                  'created_at': now,
+                });
 
-  void _showAttachmentOptions() {
-    showModalBottomSheet(
-      context: context,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Container(
-        padding: EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Color(0xFF5E9EF5).withValues(alpha: 0.1),
-                child: Icon(Icons.photo_library, color: Color(0xFF5E9EF5)),
-              ),
-              title: Text('Photo & Video'),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Photo picker coming soon')),
-                );
+                // 2. Update room summary
+                await _supabase.from('chat_rooms').update({
+                  'last_message': txt,
+                  'updated_at': now,
+                }).eq('id', widget.roomId);
               },
-            ),
-            ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Color(0xFFFF6B9D).withValues(alpha: 0.1),
-                child: Icon(Icons.insert_drive_file, color: Color(0xFFFF6B9D)),
-              ),
-              title: Text('Document'),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Document picker coming soon')),
-                );
-              },
+              child: const Icon(Icons.send_rounded, color: Color(0xFF6B4EE0)),
             ),
           ],
         ),

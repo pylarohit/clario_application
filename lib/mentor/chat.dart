@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:file_picker/file_picker.dart';
 
 class MentorChatPage extends StatefulWidget {
   const MentorChatPage({super.key});
@@ -9,18 +11,30 @@ class MentorChatPage extends StatefulWidget {
   State<MentorChatPage> createState() => _MentorChatPageState();
 }
 
-class _MentorChatPageState extends State<MentorChatPage> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final TextEditingController _searchController = TextEditingController();
+class _MentorChatPageState extends State<MentorChatPage> {
   final _supabase = Supabase.instance.client;
-  
   Stream<List<Map<String, dynamic>>>? _roomsStream;
+  String? _userPhotoUrl;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _setupRoomsStream();
+    _loadUserProfile();
+  }
+
+  Future<void> _loadUserProfile() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        final userMetadata = user.userMetadata;
+        if (userMetadata != null && userMetadata['avatar_url'] != null) {
+          setState(() => _userPhotoUrl = userMetadata['avatar_url']);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading user profile: $e');
+    }
   }
 
   void _setupRoomsStream() {
@@ -35,319 +49,270 @@ class _MentorChatPageState extends State<MentorChatPage> with SingleTickerProvid
   }
 
   @override
-  void dispose() {
-    _tabController.dispose();
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: Column(
-        children: [
-          _buildHeader(),
-          _buildSearchBar(),
-          _buildTabs(),
-          Expanded(child: _buildChatList()),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF5E9EF5), Color(0xFF1B2347)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  'Messages',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'Manage your student conversations',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.white70,
-                  ),
-                ),
-              ],
-            ),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: IconButton(
-                icon: const Icon(Icons.mark_chat_read_outlined, color: Colors.white),
-                onPressed: () {},
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSearchBar() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      color: Colors.white,
-      child: TextField(
-        controller: _searchController,
-        decoration: InputDecoration(
-          hintText: 'Search students or messages...',
-          prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
-          suffixIcon: _searchController.text.isNotEmpty
-              ? IconButton(
-                  icon: Icon(Icons.clear, color: Colors.grey[600]),
-                  onPressed: () {
-                    setState(() {
-                      _searchController.clear();
-                    });
-                  },
-                )
-              : null,
-          filled: true,
-          fillColor: const Color(0xFFF1F5F9),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        ),
-        onChanged: (value) {
-          setState(() {});
-        },
-      ),
-    );
-  }
-
-  Widget _buildTabs() {
-    return Container(
-      color: Colors.white,
-      child: TabBar(
-        controller: _tabController,
-        indicatorColor: const Color(0xFF5E9EF5),
-        labelColor: const Color(0xFF5E9EF5),
-        unselectedLabelColor: Colors.grey[600],
-        labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-        tabs: const [
-          Tab(text: 'Current Discussions'),
-          Tab(text: 'Unread Only'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChatList() {
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _roomsStream,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        
-        final rooms = snapshot.data ?? [];
-        
-        return TabBarView(
-          controller: _tabController,
-          children: [
-            _buildConversationList(rooms),
-            _buildConversationList(
-              rooms.where((room) => (room['unread_count'] ?? 0) > 0).toList(),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildConversationList(List<Map<String, dynamic>> conversations) {
-    if (conversations.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey[300]),
-            const SizedBox(height: 16),
-            Text(
-              'No messages found',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.only(top: 8, bottom: 20),
-      itemCount: conversations.length,
-      itemBuilder: (context, index) {
-        return _buildConversationItem(conversations[index]);
-      },
-    );
-  }
-
-  Widget _buildConversationItem(Map<String, dynamic> conversation) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => MentorChatDetailPage(
-                roomId: conversation['id'],
-                studentName: conversation['student_name'] ?? 'Student',
-                studentGrade: conversation['student_grade'] ?? 'Scholar',
-                studentAvatar: conversation['student_avatar'] ?? 'assets/a1.png',
-                isOnline: conversation['is_online'] ?? false,
-              ),
-            ),
-          );
-        },
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
+      backgroundColor: const Color(0xFFB1A9DE), // Lavender Background
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: _roomsStream,
+        builder: (context, snapshot) {
+          final rooms = snapshot.data ?? [];
+          final bool isLoading = snapshot.connectionState == ConnectionState.waiting;
+          
+          return Column(
             children: [
-              Stack(
-                children: [
-                  CircleAvatar(
-                    radius: 28,
-                    backgroundImage: AssetImage(conversation['student_avatar'] ?? 'assets/a1.png'),
-                    backgroundColor: Colors.grey[200],
-                  ),
-                  if (conversation['is_online'] == true)
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        width: 14,
-                        height: 14,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF4CAF50),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(width: 14),
+              _buildTopBar(),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Container(
+                  width: double.infinity,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(45)),
+                  ),
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          conversation['student_name'] ?? 'Student',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1B2347),
-                          ),
-                        ),
-                        Text(
-                          conversation['updated_at'] != null 
-                            ? DateFormat.jm().format(DateTime.parse(conversation['updated_at']))
-                            : '',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[500],
-                          ),
-                        ),
+                        const SizedBox(height: 30),
+                        _buildHeaderRow(),
+                        const SizedBox(height: 30),
+                        _buildActivitiesSection(rooms),
+                        const SizedBox(height: 30),
+                        _buildMessagesSection(rooms, isLoading),
                       ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      conversation['student_grade'] ?? 'Scholar',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF5E9EF5),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            conversation['last_message'] ?? 'No messages yet',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: (conversation['unread_count'] ?? 0) > 0
-                                  ? const Color(0xFF1B2347)
-                                  : Colors.grey[600],
-                              fontWeight: (conversation['unread_count'] ?? 0) > 0
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if ((conversation['unread_count'] ?? 0) > 0)
-                          Container(
-                            margin: const EdgeInsets.only(left: 8),
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF5E9EF5),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              '${conversation['unread_count']}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTopBar() {
+    return Container(
+      padding: const EdgeInsets.only(top: 50, left: 24, right: 24, bottom: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const SizedBox(width: 40),
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: Colors.white.withOpacity(0.3),
+            backgroundImage: _userPhotoUrl != null 
+                ? NetworkImage(_userPhotoUrl!) 
+                : const NetworkImage('https://cdn-icons-png.flaticon.com/512/3135/3135715.png'),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderRow() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Messages',
+            style: GoogleFonts.outfit(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF1B2347),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFB1A9DE).withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.search, color: Color(0xFF6B4EE0), size: 24),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActivitiesSection(List<Map<String, dynamic>> rooms) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Text(
+            'Students',
+            style: GoogleFonts.outfit(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF1B2347),
+            ),
+          ),
+        ),
+        const SizedBox(height: 15),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Row(
+            children: rooms.map((room) {
+              return Padding(
+                padding: const EdgeInsets.only(right: 20),
+                child: Container(
+                  width: 68,
+                  height: 68,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFF6B4EE0), width: 2.5),
+                  ),
+                  padding: const EdgeInsets.all(2),
+                  child: CircleAvatar(
+                    backgroundImage: AssetImage(room['student_avatar'] ?? 'assets/a1.png'),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMessagesSection(List<Map<String, dynamic>> rooms, bool isLoading) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Text(
+            'Conversations',
+            style: GoogleFonts.outfit(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF1B2347),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (isLoading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: CircularProgressIndicator(color: Color(0xFF6B4EE0))),
+          )
+        else if (rooms.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 40),
+            child: Center(
+              child: Text(
+                'No student messages yet',
+                style: GoogleFonts.outfit(color: Colors.black38),
+              ),
+            ),
+          )
+        else
+          ListView.separated(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: rooms.length,
+            separatorBuilder: (context, index) => Padding(
+              padding: const EdgeInsets.only(left: 100, right: 24),
+              child: Divider(color: Colors.grey.withOpacity(0.1), thickness: 1),
+            ),
+            itemBuilder: (context, index) => _buildChatItem(rooms[index]),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildChatItem(Map<String, dynamic> room) {
+    String timeAgo = 'Now';
+    if (room['updated_at'] != null) {
+      final updated = DateTime.parse(room['updated_at']);
+      final diff = DateTime.now().difference(updated);
+      if (diff.inMinutes < 1) timeAgo = 'Now';
+      else if (diff.inMinutes < 60) timeAgo = '${diff.inMinutes} min';
+      else if (diff.inHours < 24) timeAgo = '${diff.inHours} hr';
+      else timeAgo = '${diff.inDays} d';
+    }
+
+    final int unreadCount = room['unread_count'] ?? 0;
+
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MentorChatDetailPage(
+              roomId: room['id'],
+              studentName: room['student_name'] ?? 'Student',
+              studentGrade: room['student_grade'] ?? 'Senior Scholar',
+              studentAvatar: room['student_avatar'] ?? 'assets/a1.png',
+              isOnline: true,
+            ),
+          ),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 32,
+              backgroundImage: AssetImage(room['student_avatar'] ?? 'assets/a1.png'),
+              backgroundColor: Colors.grey[200],
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    room['student_name'] ?? 'Unknown Student',
+                    style: GoogleFonts.outfit(
+                      color: const Color(0xFF6B4EE0),
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    room['last_message'] ?? 'No messages yet',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.outfit(
+                      color: Colors.black45,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  timeAgo,
+                  style: GoogleFonts.outfit(color: Colors.black38, fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                if (unreadCount > 0)
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF6B4EE0),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      unreadCount.toString(),
+                      style: GoogleFonts.outfit(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -376,285 +341,221 @@ class MentorChatDetailPage extends StatefulWidget {
 
 class _MentorChatDetailPageState extends State<MentorChatDetailPage> {
   final TextEditingController _messageController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
   final _supabase = Supabase.instance.client;
-  
-  Stream<List<Map<String, dynamic>>>? _messagesStream;
+  String? _userPhotoUrl;
 
   @override
   void initState() {
     super.initState();
-    _setupMessagesStream();
+    _loadUserProfile();
   }
 
-  void _setupMessagesStream() {
-    _messagesStream = _supabase
-        .from('messages')
-        .stream(primaryKey: ['id'])
-        .eq('room_id', widget.roomId)
-        .order('created_at', ascending: false);
-  }
-
-  @override
-  void dispose() {
-    _messageController.dispose();
-    _scrollController.dispose();
-    super.dispose();
+  Future<void> _loadUserProfile() async {
+    final user = _supabase.auth.currentUser;
+    if (user != null && user.userMetadata != null) {
+      setState(() => _userPhotoUrl = user.userMetadata!['avatar_url']);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 1,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF1B2347), size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Row(
-          children: [
-            Stack(
-              children: [
-                CircleAvatar(
-                  radius: 18,
-                  backgroundImage: AssetImage(widget.studentAvatar),
-                ),
-                if (widget.isOnline)
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF4CAF50),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.studentName,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1B2347),
-                    ),
-                  ),
-                  Text(
-                    widget.isOnline ? 'Active Now' : 'Offline',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: widget.isOnline ? const Color(0xFF4CAF50) : Colors.grey[500],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.videocam_outlined, color: Color(0xFF5E9EF5)),
-            onPressed: () {},
-          ),
-          IconButton(
-            icon: const Icon(Icons.more_vert, color: Color(0xFF1B2347)),
-            onPressed: () {},
-          ),
-        ],
-      ),
+      backgroundColor: Colors.white,
       body: Column(
         children: [
+          _buildHeader(),
           Expanded(
             child: StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _messagesStream,
+              stream: _supabase.from('messages').stream(primaryKey: ['id']).eq('room_id', widget.roomId).order('created_at', ascending: false),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final messages = snapshot.data ?? [];
-                
-                // Scroll to bottom when new messages arrive
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (_scrollController.hasClients) {
-                    _scrollController.animateTo(
-                      _scrollController.position.maxScrollExtent,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                    );
-                  }
-                });
-
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFF6B4EE0)));
+                final messages = snapshot.data!;
                 return ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  reverse: true, // Show newest at the bottom
+                  reverse: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final msg = messages[index];
-                    return _buildMessageBubble({
-                      'text': msg['text'],
-                      'isMe': msg['sender_id'] == _supabase.auth.currentUser?.id,
-                      'time': DateFormat.jm().format(DateTime.parse(msg['created_at'])),
-                    });
+                    final isMe = msg['sender_id'] == _supabase.auth.currentUser?.id;
+                    return _buildModernBubble(msg, isMe);
                   },
                 );
               },
             ),
           ),
-          _buildMessageInput(),
+          _buildInputPill(),
         ],
       ),
     );
   }
 
-  Widget _buildMessageBubble(Map<String, dynamic> message) {
-    final isMe = message['isMe'];
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (!isMe) ...[
-            CircleAvatar(
-              radius: 14,
-              backgroundImage: AssetImage(widget.studentAvatar),
-            ),
-            const SizedBox(width: 8),
-          ],
-          Container(
-            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: isMe ? const Color(0xFF1B2347) : Colors.white,
-              borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(16),
-                topRight: const Radius.circular(16),
-                bottomLeft: Radius.circular(isMe ? 16 : 4),
-                bottomRight: Radius.circular(isMe ? 4 : 16),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 5,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  message['text'],
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: isMe ? Colors.white : const Color(0xFF1B2347),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  message['time'],
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: isMe ? Colors.white60 : Colors.grey[500],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMessageInput() {
+  Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -5),
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        color: Color(0xFF6B4EE0),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(40)),
+      ),
+      padding: const EdgeInsets.only(top: 50, bottom: 24, left: 16, right: 16),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+            onPressed: () => Navigator.pop(context),
+          ),
+          const SizedBox(width: 8),
+          CircleAvatar(
+            radius: 22,
+            backgroundImage: AssetImage(widget.studentAvatar),
+            backgroundColor: Colors.grey[200],
+          ),
+          const SizedBox(width: 14),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                widget.studentName,
+                style: GoogleFonts.outfit(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                widget.studentGrade,
+                style: GoogleFonts.outfit(color: Colors.white.withOpacity(0.7), fontSize: 13),
+              ),
+            ],
           ),
         ],
       ),
-      child: Row(
+    );
+  }
+
+  Widget _buildModernBubble(Map<String, dynamic> msg, bool isMe) {
+    final String time = msg['created_at'] != null ? DateFormat.jm().format(DateTime.parse(msg['created_at'])) : '';
+    final String text = msg['text'] ?? '';
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
         children: [
-          Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.add, color: Color(0xFF5E9EF5)),
-              onPressed: () {},
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: TextField(
-              controller: _messageController,
-              decoration: InputDecoration(
-                hintText: 'Type your message...',
-                hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
-                filled: true,
-                fillColor: const Color(0xFFF1F5F9),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+          Row(
+            mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (!isMe)
+                CircleAvatar(radius: 16, backgroundImage: AssetImage(widget.studentAvatar)),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: isMe ? const Color(0xFF6B4EE0) : const Color(0xFFE8EAF6),
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(20),
+                      topRight: const Radius.circular(20),
+                      bottomLeft: isMe ? const Radius.circular(20) : const Radius.circular(4),
+                      bottomRight: isMe ? const Radius.circular(4) : const Radius.circular(20),
+                    ),
+                  ),
+                  child: Text(
+                    text,
+                    style: GoogleFonts.outfit(color: isMe ? Colors.white : const Color(0xFF1B2347), fontSize: 15),
+                  ),
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               ),
-              maxLines: null,
+              const SizedBox(width: 8),
+              if (isMe)
+                CircleAvatar(
+                  radius: 16,
+                  backgroundImage: _userPhotoUrl != null 
+                      ? NetworkImage(_userPhotoUrl!) 
+                      : const NetworkImage('https://cdn-icons-png.flaticon.com/512/3135/3135715.png'),
+                ),
+            ],
+          ),
+          Padding(
+            padding: EdgeInsets.only(top: 4, left: isMe ? 0 : 50, right: isMe ? 50 : 0),
+            child: Row(
+              mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+              children: [
+                if (isMe) const Icon(Icons.done_all, size: 14, color: Color(0xFF6B4EE0)),
+                const SizedBox(width: 4),
+                Text(time, style: GoogleFonts.outfit(color: Colors.black38, fontSize: 11)),
+              ],
             ),
           ),
-          const SizedBox(width: 12),
-          Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF5E9EF5),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
-              onPressed: () async {
-                final text = _messageController.text.trim();
-                if (text.isNotEmpty) {
-                  _messageController.clear();
-                  try {
-                    final userId = _supabase.auth.currentUser?.id;
-                    await _supabase.from('messages').insert({
-                      'room_id': widget.roomId,
-                      'sender_id': userId,
-                      'text': text,
-                      'created_at': DateTime.now().toIso8601String(),
-                    });
-                    
-                    // Update room's last message
-                    await _supabase.from('chat_rooms').update({
-                      'last_message': text,
-                      'updated_at': DateTime.now().toIso8601String(),
-                    }).eq('id', widget.roomId);
-                  } catch (e) {
-                    debugPrint('❌ Error sending message: $e');
-                  }
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInputPill() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
+      color: Colors.white,
+      child: Container(
+        height: 56,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: const Color(0xFFEEEEEE), width: 1.5),
+        ),
+        child: Row(
+          children: [
+            GestureDetector(
+              onTap: () async {
+                final result = await FilePicker.platform.pickFiles();
+                if (result != null && result.files.single.name != null) {
+                  final fileName = result.files.single.name;
+                  final now = DateTime.now().toIso8601String();
+                  await _supabase.from('messages').insert({
+                    'room_id': widget.roomId,
+                    'sender_id': _supabase.auth.currentUser?.id,
+                    'text': 'Attachment: $fileName',
+                    'created_at': now,
+                  });
+                  await _supabase.from('chat_rooms').update({
+                    'last_message': 'Attachment: $fileName',
+                    'updated_at': now,
+                  }).eq('id', widget.roomId);
                 }
               },
+              child: const Icon(Icons.attach_file, color: Colors.black26, size: 20),
             ),
-          ),
-        ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: _messageController,
+                style: GoogleFonts.outfit(fontSize: 15),
+                decoration: InputDecoration(
+                  hintText: 'Enter Message',
+                  hintStyle: GoogleFonts.outfit(color: Colors.black26),
+                  border: InputBorder.none,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            GestureDetector(
+              onTap: () async {
+                final txt = _messageController.text.trim();
+                if (txt.isEmpty) return;
+                _messageController.clear();
+                final now = DateTime.now().toIso8601String();
+                await _supabase.from('messages').insert({
+                  'room_id': widget.roomId,
+                  'sender_id': _supabase.auth.currentUser?.id,
+                  'text': txt,
+                  'created_at': now,
+                });
+                await _supabase.from('chat_rooms').update({
+                  'last_message': txt,
+                  'updated_at': now,
+                }).eq('id', widget.roomId);
+              },
+              child: const Icon(Icons.send_rounded, color: Color(0xFF6B4EE0)),
+            ),
+          ],
+        ),
       ),
     );
   }

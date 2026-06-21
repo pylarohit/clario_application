@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../home/home.dart';           // If needed
@@ -216,7 +216,7 @@ class _MentorLoginPageState extends State<MentorLoginPage>
     try {
       await Supabase.instance.client.auth.signInWithOAuth(
         provider,
-        redirectTo: 'io.supabase.flutter://login-callback',
+        redirectTo: kIsWeb ? Uri.base.origin : 'io.supabase.flutter://login-callback',
       );
       // Note: Deep link listener in main.dart will handle session
       // You should handle role-based routing in a global Auth Listener

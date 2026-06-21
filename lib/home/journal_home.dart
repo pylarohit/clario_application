@@ -1,31 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:intl/intl.dart';
 import '../components/horizontal_calendar.dart';
 
-class CalendarPage extends StatefulWidget {
+class JournalHomePage extends StatefulWidget {
   final VoidCallback? onProfileClick;
-  const CalendarPage({super.key, this.onProfileClick});
+  const JournalHomePage({super.key, this.onProfileClick});
 
   @override
-  State<CalendarPage> createState() => _CalendarPageState();
+  State<JournalHomePage> createState() => _JournalHomePageState();
 }
 
-class _CalendarPageState extends State<CalendarPage> {
-  DateTime _selectedDate = DateTime.now();
-  String _userName = "User";
-  String? _userPhotoUrl;
+class _JournalHomePageState extends State<JournalHomePage> {
+  DateTime _selectedDateValue = DateTime.now();
 
-  // Initialize with an empty list which will be populated from DB
+  // Initialize with an empty list to show only user-added tasks
   List<Map<String, dynamic>> _userTasks = [];
   bool _isLoadingTasks = false;
+  String _userName = 'User';
+  String? _userPhotoUrl;
+
+  DateTime get _selectedDate => _selectedDateValue;
 
   @override
   void initState() {
     super.initState();
     _loadUserProfile();
     _fetchTasks();
+  }
+
+  Future<void> _loadUserProfile() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        final userMetadata = user.userMetadata;
+        if (userMetadata != null) {
+          final photoUrl = userMetadata['avatar_url'] ?? userMetadata['picture'];
+          final name = userMetadata['full_name'] ?? user.email?.split('@')[0] ?? 'User';
+          setState(() {
+            _userName = name;
+            _userPhotoUrl = photoUrl;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading user profile: $e');
+    }
   }
 
   Future<void> _fetchTasks() async {
@@ -42,8 +62,7 @@ class _CalendarPageState extends State<CalendarPage> {
         if (response != null) {
           setState(() {
             _userTasks = List<Map<String, dynamic>>.from(response).map((task) {
-              // Convert hex string back to Color if it exists
-              Color taskColor = const Color(0xFFFFB74D); // Default
+              Color taskColor = const Color(0xFFFFB74D);
               if (task['color'] != null) {
                 try {
                   String colorVal = task['color'].replaceFirst('#', '');
@@ -92,7 +111,6 @@ class _CalendarPageState extends State<CalendarPage> {
         'created_at': DateTime.now().toIso8601String(),
       });
 
-      // Refresh tasks after adding
       await _fetchTasks();
     } catch (e) {
       debugPrint('Error adding task: $e');
@@ -187,7 +205,7 @@ class _CalendarPageState extends State<CalendarPage> {
                       const Icon(Icons.calendar_today, size: 18, color: Colors.black54),
                       const SizedBox(width: 10),
                       Text(
-                        DateFormat('MMMM d, y').format(dialogSelectedDate),
+                        "${dialogSelectedDate.day}/${dialogSelectedDate.month}/${dialogSelectedDate.year}",
                         style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w500),
                       ),
                     ],
@@ -204,9 +222,7 @@ class _CalendarPageState extends State<CalendarPage> {
             ElevatedButton(
               onPressed: () async {
                 if (titleController.text.isNotEmpty) {
-                  // Pop the dialog first to provide immediate feedback
                   Navigator.pop(context);
-                  
                   await _addTaskToDatabase(
                     title: titleController.text,
                     subtitle: subtitleController.text,
@@ -240,36 +256,15 @@ class _CalendarPageState extends State<CalendarPage> {
     }
   }
 
-  Future<void> _loadUserProfile() async {
-    try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user != null) {
-        final userMetadata = user.userMetadata;
-        if (userMetadata != null) {
-          final photoUrl = userMetadata['avatar_url'] ?? userMetadata['picture'];
-          if (photoUrl != null) {
-            setState(() {
-              _userPhotoUrl = photoUrl;
-            });
-          }
-        }
-
-        final response = await Supabase.instance.client
-            .from('users')
-            .select()
-            .eq('id', user.id)
-            .maybeSingle();
-
-        if (response != null && response['userName'] != null) {
-          setState(() {
-            _userName = response['userName'];
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('Error loading user profile: $e');
-    }
-  }
+  final List<Map<String, String>> _calendarDays = [
+    {'day': 'Mon', 'date': '7'},
+    {'day': 'Tue', 'date': '8'},
+    {'day': 'Wed', 'date': '9'},
+    {'day': 'Thu', 'date': '10'},
+    {'day': 'Fri', 'date': '11'},
+    {'day': 'Sat', 'date': '12'},
+    {'day': 'Sun', 'date': '13'},
+  ];
 
   Map<String, dynamic> _getTimeOfDayDetails() {
     final hour = DateTime.now().hour;
@@ -315,7 +310,7 @@ class _CalendarPageState extends State<CalendarPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F1ED),
+      backgroundColor: const Color(0xFFF2F1ED), // Off-white/cream background
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -330,7 +325,7 @@ class _CalendarPageState extends State<CalendarPage> {
                 taskDates: _userTasks.map((t) => t['date'] as DateTime).toList(),
                 onDateSelected: (date) {
                   setState(() {
-                    _selectedDate = date;
+                    _selectedDateValue = date;
                   });
                 },
               ),
@@ -343,6 +338,15 @@ class _CalendarPageState extends State<CalendarPage> {
           ),
         ),
       ),
+      bottomNavigationBar: _buildBottomNav(),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {},
+        backgroundColor: const Color(0xFFFFB74D), // Yellow color from design
+        elevation: 4,
+        shape: const CircleBorder(),
+        child: const Icon(Icons.add, color: Colors.black87, size: 30),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
 
@@ -362,31 +366,15 @@ class _CalendarPageState extends State<CalendarPage> {
           onTap: () => widget.onProfileClick?.call(),
           child: CircleAvatar(
             radius: 24,
-            backgroundColor: const Color(0xFF5E9EF5),
-            backgroundImage: _userPhotoUrl != null ? NetworkImage(_userPhotoUrl!) : null,
-            onBackgroundImageError: _userPhotoUrl != null
-                ? (exception, stackTrace) {
-                    setState(() {
-                      _userPhotoUrl = null;
-                    });
-                  }
-                : null,
-            child: _userPhotoUrl == null
-                ? Text(
-                    _userName.isNotEmpty ? _userName[0].toUpperCase() : 'U',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  )
-                : null,
+            backgroundColor: Colors.grey[300],
+            backgroundImage: _userPhotoUrl != null 
+                ? NetworkImage(_userPhotoUrl!) 
+                : const NetworkImage('https://cdn-icons-png.flaticon.com/512/3135/3135715.png'),
           ),
         ),
       ],
     );
   }
-
 
   Widget _buildJournalSection() {
     final details = _getTimeOfDayDetails();
@@ -445,7 +433,7 @@ class _CalendarPageState extends State<CalendarPage> {
                             textAlign: TextAlign.center,
                             style: GoogleFonts.outfit(
                               fontSize: 14,
-                              color: isNight ? Colors.white70 : Colors.black.withOpacity(0.7),
+                              color: isNight ? Colors.white70 : Colors.black.withValues(alpha: 0.7),
                             ),
                           ),
                         ],
@@ -455,7 +443,10 @@ class _CalendarPageState extends State<CalendarPage> {
                       bottom: 0,
                       left: 0,
                       right: 0,
-                      child: _buildSunshineIllustration(details['illustrationType']),
+                      child: CustomPaint(
+                        size: const Size(double.infinity, 100),
+                        painter: LandscapePainter(type: details['illustrationType']),
+                      ),
                     ),
                   ],
                 ),
@@ -492,12 +483,12 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   Widget _buildQuickJournalSection() {
-    // Filter tasks for the selected date
     final dailyTasks = _userTasks.where((task) {
       final taskDate = task['date'] as DateTime;
-      return taskDate.year == _selectedDate.year &&
-             taskDate.month == _selectedDate.month &&
-             taskDate.day == _selectedDate.day;
+      final selectedDate = _selectedDate;
+      return taskDate.year == selectedDate.year &&
+             taskDate.month == selectedDate.month &&
+             taskDate.day == selectedDate.day;
     }).toList();
 
     return Column(
@@ -514,10 +505,7 @@ class _CalendarPageState extends State<CalendarPage> {
               ),
             ),
             TextButton(
-              onPressed: () {
-                // Show all tasks modal or navigate
-                _showAllTasksSheet();
-              },
+              onPressed: _showAllTasksSheet,
               child: Text(
                 'See all',
                 style: GoogleFonts.outfit(
@@ -599,6 +587,8 @@ class _CalendarPageState extends State<CalendarPage> {
                     itemCount: _userTasks.length,
                     itemBuilder: (context, index) {
                       final task = _userTasks[index];
+                      // Use a default format if intl is not fully initialized for some reason
+                      String dateStr = "${task['date'].day}/${task['date'].month}";
                       return Container(
                         margin: const EdgeInsets.only(bottom: 12),
                         padding: const EdgeInsets.all(16),
@@ -618,7 +608,7 @@ class _CalendarPageState extends State<CalendarPage> {
                               ),
                             ),
                             Text(
-                              DateFormat('MMM d').format(task['date']),
+                              dateStr,
                               style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w600),
                             ),
                           ],
@@ -707,6 +697,7 @@ class _CalendarPageState extends State<CalendarPage> {
       child: Stack(
         alignment: Alignment.bottomCenter,
         children: [
+          // Simplified landscape representation
           ClipRRect(
             borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
             child: CustomPaint(
@@ -715,7 +706,7 @@ class _CalendarPageState extends State<CalendarPage> {
             ),
           ),
           Positioned(
-            bottom: 10,
+            bottom: 30,
             child: Container(
               width: 60,
               height: 60,
@@ -750,6 +741,47 @@ class _CalendarPageState extends State<CalendarPage> {
       ),
     );
   }
+
+  Widget _buildBottomNav() {
+    return BottomAppBar(
+      height: 70,
+      color: Colors.white,
+      notchMargin: 8,
+      shape: const CircularNotchedRectangle(),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildNavItem(Icons.home_filled, 'Home', true),
+          _buildNavItem(Icons.explore_outlined, 'Explore', false),
+          const SizedBox(width: 40), // Space for FAB
+          _buildNavItem(Icons.assignment_outlined, 'Journey', false),
+          _buildNavItem(Icons.person_outline, 'Profile', false),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavItem(IconData icon, String label, bool isSelected) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          icon,
+          color: isSelected ? Colors.black : Colors.grey[400],
+          size: 26,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 10,
+            color: isSelected ? Colors.black : Colors.grey[400],
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class LandscapePainter extends CustomPainter {
@@ -759,19 +791,9 @@ class LandscapePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..style = PaintingStyle.fill;
-    
-    Color hill1 = const Color(0xFFE2B71B).withValues(alpha: 0.5);
-    Color hill2 = const Color(0xFF8DB600).withValues(alpha: 0.8);
 
-    if (type == 'evening') {
-      hill1 = const Color(0xFF8D6E63).withValues(alpha: 0.5);
-      hill2 = const Color(0xFF4E342E).withValues(alpha: 0.8);
-    } else if (type == 'night') {
-      hill1 = const Color(0xFF303F9F).withValues(alpha: 0.5);
-      hill2 = const Color(0xFF1A237E).withValues(alpha: 0.8);
-    }
-
-    paint.color = hill1;
+    // Background hills
+    paint.color = const Color(0xFFE2B71B).withOpacity(0.5);
     final path1 = Path();
     path1.moveTo(0, size.height);
     path1.quadraticBezierTo(size.width * 0.2, size.height * 0.6, size.width * 0.5, size.height * 0.8);
@@ -780,7 +802,8 @@ class LandscapePainter extends CustomPainter {
     path1.close();
     canvas.drawPath(path1, paint);
 
-    paint.color = hill2;
+    // Foreground grass
+    paint.color = const Color(0xFF8DB600).withOpacity(0.8);
     final path2 = Path();
     path2.moveTo(0, size.height);
     path2.quadraticBezierTo(size.width * 0.3, size.height * 0.7, size.width * 0.6, size.height * 0.9);
@@ -788,7 +811,7 @@ class LandscapePainter extends CustomPainter {
     path2.close();
     canvas.drawPath(path2, paint);
   }
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
-}
 
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}

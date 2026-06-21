@@ -400,9 +400,9 @@ class _LoginPageState extends State<LoginPage>
                               style: GoogleFonts.raleway(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
-                                color: const Color(0xFF064D44),
+                                color: const Color(0xFF6B4EE0),
                                 decoration: TextDecoration.underline,
-                                decorationColor: const Color(0xFF064D44),
+                                decorationColor: const Color(0xFF6B4EE0),
                               ),
                             ),
                           ),
@@ -488,10 +488,10 @@ class _LoginPageState extends State<LoginPage>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFF064D44), // Main Teal
-              Color(0xFF0C7D6F), // Medium Teal
-              Color(0xFF1E3A37), // Darker Teal
-              Color(0xFF064D44), // Main Teal
+              Color(0xFFB1A9DE), // Lavender
+              Color(0xFF8E82CF), // Medium Purple
+              Color(0xFF6B4EE0), // Deep Purple
+              Color(0xFFB1A9DE), // Lavender
             ],
           ),
         ),
@@ -559,14 +559,14 @@ class _LoginPageState extends State<LoginPage>
           borderRadius: BorderRadius.circular(30),
           gradient: const LinearGradient(
             colors: [
-              Color(0xFF0C7D6F), // Medium Teal
-              Color(0xFF064D44), // Main Teal
-              Color(0xFF064D44), // Main Teal
+              Color(0xFFB1A9DE), // Lavender
+              Color(0xFF6B4EE0), // Deep Purple
+              Color(0xFF6B4EE0), // Deep Purple
             ],
           ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF064D44).withValues(alpha: 0.3),
+              color: const Color(0xFF6B4EE0).withValues(alpha: 0.3),
               blurRadius: 16,
               offset: const Offset(0, 6),
             ),

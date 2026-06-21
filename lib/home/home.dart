@@ -1170,11 +1170,12 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   // ============================================================================
   // TOP BAR - Search Bar with Hamburger Menu
-  // ========================================================================  /// Build the new premium teal header from the design
+  // ========================================================================  /// Build the new premium lavender header from the design
   Widget _buildTopSearchBar() {
     return Container(
       decoration: const BoxDecoration(
-        color: Color(0xFF064D44), // Main Teal Color
+        //color: Color(0xFF064D44), //pervious green color for further use 
+        color: Color(0xFFB1A9DE), // Lavender Background
         borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(32),
           bottomRight: Radius.circular(32),
@@ -1192,10 +1193,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: const Color(0xFF1B2347).withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.menu_rounded, color: Colors.white, size: 24),
+                  child: const Icon(Icons.menu_rounded, color: Color(0xFF1B2347), size: 24),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1203,7 +1204,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
               const Text(
                 'ReSkill',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: Color(0xFF1B2347),
                   fontSize: 22,
                   fontWeight: FontWeight.w900,
                   letterSpacing: -0.5,
@@ -1218,10 +1219,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
+                          color: const Color(0xFF1B2347).withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(Icons.notifications_outlined, color: Colors.white, size: 24),
+                        child: const Icon(Icons.notifications_outlined, color: Color(0xFF1B2347), size: 24),
                       ),
                       Positioned(
                         right: 8,
@@ -1252,12 +1253,12 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                               errorBuilder: (context, error, stackTrace) => Container(
                                 width: 42,
                                 height: 42,
-                                color: Colors.white24,
+                                color: const Color(0xFF1B2347).withValues(alpha: 0.12),
                                 child: Center(
                                   child: Text(
                                     _userInitial, 
                                     style: const TextStyle(
-                                      color: Colors.white, 
+                                      color: Color(0xFF1B2347), 
                                       fontWeight: FontWeight.bold, 
                                       fontSize: 14,
                                     ),
@@ -1268,8 +1269,8 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                           : Container(
                               width: 42,
                               height: 42,
-                              color: Colors.white24,
-                              child: Center(child: Text(_userInitial, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14))),
+                              color: const Color(0xFF1B2347).withValues(alpha: 0.12),
+                              child: Center(child: Text(_userInitial, style: const TextStyle(color: Color(0xFF1B2347), fontWeight: FontWeight.bold, fontSize: 14))),
                             ),
                     ),
                   ),
@@ -1282,20 +1283,27 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           Container(
             height: 48,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
+              color: Colors.white,
               borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
               children: [
-                Icon(Icons.search, color: Colors.white.withOpacity(0.5), size: 20),
+                const Icon(Icons.search, color: Color(0xFF6B4EE0), size: 20),
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    style: const TextStyle(color: Color(0xFF1B2347), fontSize: 13),
                     decoration: InputDecoration(
                       hintText: 'Search mentors...',
-                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 13),
+                      hintStyle: TextStyle(color: const Color(0xFF1B2347).withValues(alpha: 0.4), fontSize: 13),
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.only(bottom: 2),
                     ),
@@ -1374,7 +1382,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
               margin: const EdgeInsets.symmetric(horizontal: 4),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(4),
-                color: _currentCarouselIndex == index ? Colors.white : Colors.white24,
+                color: _currentCarouselIndex == index ? const Color(0xFF1B2347) : const Color(0xFF1B2347).withValues(alpha: 0.2),
               ),
             )),
           ),
@@ -1395,13 +1403,19 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       padding: const EdgeInsets.all(20),
       margin: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.white.withOpacity(0.15), Colors.white.withOpacity(0.05)],
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1B2347), Color(0xFF2E3B75)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1B2347).withValues(alpha: 0.15),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -2388,7 +2402,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           },
           type: BottomNavigationBarType.fixed,
           backgroundColor: Colors.white,
-          selectedItemColor: const Color(0xFF064D44),
+          selectedItemColor: const Color(0xFF6B4EE0),
           unselectedItemColor: Colors.grey[400],
           selectedFontSize: 12,
           unselectedFontSize: 12,
@@ -2422,10 +2436,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: const Color(0xFF034D41),
+          color: const Color(0xFFB1A9DE),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Icon(icon, color: Colors.white, size: 24),
+        child: Icon(icon, color: const Color(0xFF1B2347), size: 24),
       );
     }
     return Icon(icon, size: 24);
